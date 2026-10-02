@@ -1,0 +1,10 @@
+@host = http://localhost:5080
+
+### Salud
+GET {{host}}/api/health
+
+### Consulta
+POST {{host}}/api/chat
+Content-Type: application/json
+
+{ "message": "¿Cada cuánto hay que cambiar la correa de distribución?", "history": [] }

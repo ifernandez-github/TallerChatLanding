@@ -1,0 +1,8 @@
+bin/
+obj/
+.vs/
+*.user
+node_modules/
+src/TallerChat.Api/wwwroot/
+.env
+appsettings.*.local.json

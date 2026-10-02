@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#030608" />
+    <title>Taller Torque · Mecánica de precisión, diagnóstico honesto</title>
+    <meta name="description" content="Taller mecánico: mantenimiento, frenos, diagnosis electrónica, distribución, neumáticos, aire acondicionado y vehículos eléctricos. Pide cita o consulta al mecánico interactivo." />
+    <meta property="og:title" content="Taller Torque" />
+    <meta property="og:description" content="Mecánica de precisión, diagnóstico honesto." />
+    <meta property="og:type" content="website" />
+    <script>
+      // Tema aplicado antes de pintar (sin parpadeo) y marca de JS para las animaciones de aparición.
+      document.documentElement.classList.add('js')
+      document.documentElement.dataset.theme =
+        localStorage.getItem('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+    </script>
+    <!-- Datos de ejemplo: sustituir por los reales (deben coincidir con src/content/site.ts) -->
+    <script type="application/ld+json">
+      {"@context":"https://schema.org","@type":"AutoRepair","name":"Taller Torque","telephone":"+34910000000","email":"info@tallertorque.example","address":{"@type":"PostalAddress","streetAddress":"Calle del Motor 24","postalCode":"28045","addressLocality":"Madrid","addressCountry":"ES"},"geo":{"@type":"GeoCoordinates","latitude":40.4066,"longitude":-3.6935},"openingHours":["Mo-Fr 08:30-18:30","Sa 09:00-13:30"]}
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
