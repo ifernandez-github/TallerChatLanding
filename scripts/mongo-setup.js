@@ -1,5 +1,5 @@
-// Ejecutar con un usuario administrador:
-//   mongosh "mongodb://ADMIN:CLAVE@HOST:27017/admin" scripts/mongo-setup.js
+// Ejecutar con un usuario administrador (en Atlas, "Connect" -> "Shell" te da la cadena exacta):
+//   mongosh "mongodb+srv://ADMIN:CLAVE@tu-cluster.mongodb.net/admin" scripts/mongo-setup.js
 const tdb = db.getSiblingDB('taller_db');
 
 // Una colección solo admite UN índice de texto. Si ya tienes uno, revisa con: tdb.conocimiento.getIndexes()

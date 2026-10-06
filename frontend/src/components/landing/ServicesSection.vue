@@ -15,10 +15,13 @@ const { openChat } = useChat()
       </div>
 
       <div class="svc-grid">
-        <article v-for="(s, i) in site.services" :key="s.title" class="svc-card reveal" :style="{ '--d': `${(i % 4) * 80}ms` }">
+        <article v-for="(s, i) in site.services" :key="s.title" class="svc-card reveal" :style="{ '--d': `${(i % 4) * 60}ms` }">
           <div class="svc-ico"><Icon :name="s.icon" :size="26" /></div>
           <h3>{{ s.title }}</h3>
           <p>{{ s.text }}</p>
+          <RouterLink :to="{ path: '/cita', query: { servicio: s.icon } }" class="svc-link">
+            Pedir cita <Icon name="arrow" :size="16" />
+          </RouterLink>
         </article>
       </div>
 

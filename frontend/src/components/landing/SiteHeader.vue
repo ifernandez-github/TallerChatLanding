@@ -1,34 +1,49 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { site } from '../../content/site'
+import { useAuth } from '../../composables/useAuth'
 import { useTheme } from '../../composables/useTheme'
 import Icon from '../Icon.vue'
 
 const { theme, toggle } = useTheme()
+const { user, isAdmin } = useAuth()
+const route = useRoute()
 const scrolled = ref(false)
 const menu = ref(false)
-const links = [
-  { href: '#quienes-somos', label: 'Quiénes somos' },
-  { href: '#servicios', label: 'Servicios' },
-  { href: '#contacto', label: 'Contacto' }
-]
+
+const links = computed(() => [
+  { to: '/servicios', label: 'Servicios' },
+  { to: '/nosotros', label: 'Quiénes somos' },
+  { to: '/contacto', label: 'Contacto' },
+  ...(isAdmin.value ? [{ to: '/admin', label: 'Administración' }] : [])
+])
+// En la portada la cabecera es transparente sobre el hero; en el resto de páginas siempre es opaca.
+const solid = computed(() => scrolled.value || menu.value || route.path !== '/')
+const account = computed(() => (user.value ? { to: '/mi-cuenta', label: 'Mis citas' } : { to: '/acceso', label: 'Acceder' }))
+
 const onScroll = () => { scrolled.value = window.scrollY > 40 }
 onMounted(() => { onScroll(); window.addEventListener('scroll', onScroll, { passive: true }) })
 onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
+watch(() => route.fullPath, () => { menu.value = false })
 </script>
 
 <template>
-  <header :class="['lp-nav', { scrolled, open: menu }]">
+  <header :class="['lp-nav', { scrolled: solid, open: menu }]">
     <div class="lp-wrap nav-in">
-      <a href="#inicio" class="brand"><span class="logo-mark"><Icon name="wrench" :size="20" /></span>{{ site.name }}</a>
+      <RouterLink to="/" class="brand"><span class="logo-mark"><Icon name="wrench" :size="20" /></span>{{ site.name }}</RouterLink>
       <nav id="main-nav" :class="{ show: menu }" aria-label="Principal">
-        <a v-for="l in links" :key="l.href" :href="l.href" @click="menu = false">{{ l.label }}</a>
+        <RouterLink v-for="l in links" :key="l.to" :to="l.to">{{ l.label }}</RouterLink>
+        <RouterLink :to="account.to" class="nav-account-link">{{ account.label }}</RouterLink>
       </nav>
       <div class="nav-actions">
         <button type="button" class="icon-btn nav-btn" :aria-label="theme === 'dark' ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro'" @click="toggle">
           <Icon :name="theme === 'dark' ? 'sun' : 'moon'" />
         </button>
-        <a href="#contacto" class="btn btn-primary nav-cta">Pedir cita</a>
+        <RouterLink :to="account.to" class="icon-btn nav-btn nav-account" :aria-label="account.label" :title="account.label">
+          <Icon name="user" />
+        </RouterLink>
+        <RouterLink to="/cita" class="btn btn-primary nav-cta">Pedir cita</RouterLink>
         <button type="button" class="icon-btn nav-btn burger" :aria-expanded="menu" aria-controls="main-nav" aria-label="Menú" @click="menu = !menu">
           <Icon :name="menu ? 'close' : 'menu'" />
         </button>

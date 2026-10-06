@@ -38,7 +38,7 @@ onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
       <h1>Mecánica de precisión. <em>Diagnóstico honesto.</em></h1>
       <p>{{ site.intro }}</p>
       <div class="hero-cta">
-        <a href="#contacto" class="btn btn-primary">Pedir cita <Icon name="arrow" :size="18" /></a>
+        <RouterLink to="/cita" class="btn btn-primary">Pedir cita <Icon name="arrow" :size="18" /></RouterLink>
         <button type="button" class="btn btn-ghost" @click="openChat"><Icon name="chat" :size="18" />Hablar con el mecánico interactivo</button>
       </div>
       <ul class="hero-points">

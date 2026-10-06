@@ -42,3 +42,41 @@ public sealed class SmtpOptions
     /// <summary>Si falta Host o From, la función de email queda desactivada y la web oculta el botón.</summary>
     public bool Enabled => !string.IsNullOrWhiteSpace(Host) && !string.IsNullOrWhiteSpace(From);
 }
+
+/// <summary>Reglas de la agenda de citas.</summary>
+public sealed class BookingOptions
+{
+    public string TimeZone { get; set; } = "Europe/Madrid";
+    /// <summary>Duración de cada franja (minutos).</summary>
+    public int SlotMinutes { get; set; } = 60;
+    /// <summary>Elevadores/puestos de trabajo: nº máximo de citas simultáneas en una franja.</summary>
+    public int Bays { get; set; } = 2;
+    public int MaxDaysAhead { get; set; } = 45;
+    public int MinHoursAhead { get; set; } = 2;
+    /// <summary>Citas activas (pendientes o confirmadas) que puede tener un cliente a la vez.</summary>
+    public int MaxActivePerUser { get; set; } = 5;
+    public string WeekdayOpen { get; set; } = "08:30";
+    public string WeekdayClose { get; set; } = "18:30";
+    public string SaturdayOpen { get; set; } = "09:00";
+    public string SaturdayClose { get; set; } = "13:30";
+}
+
+/// <summary>Datos del taller que aparecen en los correos.</summary>
+public sealed class ShopOptions
+{
+    public string Name { get; set; } = "Taller Torque";
+    public string Address { get; set; } = "Calle del Motor 24, 28045 Madrid";
+    public string Phone { get; set; } = "+34 910 000 000";
+    /// <summary>URL pública de la web (enlace "Ver mis citas" de los correos).</summary>
+    public string PublicBaseUrl { get; set; } = "http://localhost:5173";
+}
+
+/// <summary>Datos iniciales. Las credenciales del administrador van en user-secrets, nunca en git.</summary>
+public sealed class SeedOptions
+{
+    public string AdminName { get; set; } = "Administración";
+    public string AdminEmail { get; set; } = "";
+    public string AdminPassword { get; set; } = "";
+    /// <summary>Crea clientes y citas de ejemplo (correos @demo.taller, a los que nunca se envían emails).</summary>
+    public bool Demo { get; set; }
+}
