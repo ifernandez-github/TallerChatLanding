@@ -45,7 +45,9 @@ builder.Services.AddHttpClient<GeminiClient>((sp, http) =>
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
-    p.WithOrigins(cfg.GetSection("Cors:Origins").Get<string[]>() ?? []).AllowAnyHeader().AllowAnyMethod()));
+    p.WithOrigins(cfg.GetSection("Cors:Origins").Get<string[]>() ?? [])
+     .AllowAnyHeader().AllowAnyMethod()
+     .AllowCredentials())); // la sesión viaja en cookie: sin esto el navegador la descarta
 
 static string Ip(HttpContext c) => c.Connection.RemoteIpAddress?.ToString() ?? "anon";
 // Si hay sesión, el límite es por usuario; si no, por IP.
@@ -88,8 +90,10 @@ if (app.Environment.IsDevelopment())
 app.MapChatEndpoints();
 app.MapEmailEndpoints();
 app.MapAuthEndpoints();
+app.MapProfileEndpoints();
 app.MapAppointmentEndpoints();
 app.MapAdminEndpoints();
-app.MapFallbackToFile("index.html");
+// El SPA responde a cualquier ruta MENOS /api/*: así una ruta de API inexistente devuelve 404 y no HTML.
+app.MapFallbackToFile("{*path:regex(^(?!api/).*$)}", "index.html");
 
 app.Run();

@@ -1,23 +1,46 @@
 // Cliente de la API de usuarios y citas. La sesión viaja en una cookie HttpOnly del mismo origen.
 export type Status = 'pending' | 'confirmed' | 'completed' | 'cancelled'
+export type DayStatus = 'free' | 'partial' | 'full' | 'closed'
 
-export interface User { id: string; name: string; email: string; phone?: string | null; role: 'client' | 'admin' }
+export interface Address { street?: string | null; postalCode?: string | null; city?: string | null; province?: string | null }
+export interface Vehicle {
+  id: string; make: string; model: string; plate: string
+  year?: number | null; km?: number | null; fuel?: string | null; vin?: string | null
+}
+export interface VehicleInput {
+  make: string; model: string; plate: string
+  year?: number | null; km?: number | null; fuel?: string | null; vin?: string | null
+}
+export interface User {
+  id: string; name: string; email: string; phone?: string | null; role: 'client' | 'admin'
+  address?: Address | null; vehicles: Vehicle[]
+}
+export interface ProfileInput { name: string; phone: string; address: Address }
+
 export interface Slot { start: string; time: string; free: number; available: boolean }
 export interface Availability { date: string; closed: boolean; slots: Slot[] }
+export interface FirstSlot { found: boolean; date?: string | null; start?: string | null; time?: string | null }
+export interface CalendarDay {
+  date: string; closed: boolean; past: boolean; booked: number; capacity: number; pending: number; status: DayStatus
+}
+export interface Calendar { month: string; days: CalendarDay[] }
+
 export interface Appointment {
   id: string; serviceId: string; serviceName: string; start: string; plate: string; vehicle: string
   notes?: string | null; status: Status; canCancel: boolean
 }
 export interface BookResponse { appointment: Appointment; emailSent: boolean }
-export interface BookInput { serviceId: string; start: string; plate: string; vehicle: string; notes: string }
+export interface BookInput { serviceId: string; start: string; vehicleId?: string | null; plate?: string; vehicle?: string; notes: string }
 export interface AdminAppointment {
-  id: string; userName: string; userEmail: string; userPhone?: string | null; serviceId: string; serviceName: string
-  start: string; bay: number; plate: string; vehicle: string; notes?: string | null; status: Status
+  id: string; userId: string; userName: string; userEmail: string; userPhone?: string | null
+  serviceId: string; serviceName: string; start: string; bay: number; plate: string; vehicle: string
+  notes?: string | null; status: Status
 }
 export interface AdminUser {
   id: string; name: string; email: string; phone?: string | null; role: 'client' | 'admin'
-  active: boolean; createdAt: string; appointments: number
+  active: boolean; createdAt: string; appointments: number; address?: Address | null; vehicles: Vehicle[]
 }
+export interface AdminUserInput { name: string; email: string; phone: string; address: Address; role?: 'client' | 'admin' }
 export interface Summary { pending: number; today: number; users: number }
 
 export class ApiError extends Error {
@@ -58,8 +81,15 @@ export const api = {
     call<User>('POST', '/api/auth/register', { name, email, phone, password }),
   logout: () => call<void>('POST', '/api/auth/logout'),
 
+  // Ficha del cliente: datos y vehículos
+  updateProfile: (input: ProfileInput) => call<User>('PUT', '/api/profile', input),
+  addVehicle: (v: VehicleInput) => call<User>('POST', '/api/profile/vehicles', v),
+  updateVehicle: (id: string, v: VehicleInput) => call<User>('PUT', `/api/profile/vehicles/${id}`, v),
+  deleteVehicle: (id: string) => call<User>('DELETE', `/api/profile/vehicles/${id}`),
+
   // Citas del cliente
   availability: (date: string) => call<Availability>('GET', `/api/appointments/availability?date=${encodeURIComponent(date)}`),
+  firstAvailable: () => call<FirstSlot>('GET', '/api/appointments/first-available'),
   myAppointments: () => call<Appointment[]>('GET', '/api/appointments/mine'),
   book: (input: BookInput) => call<BookResponse>('POST', '/api/appointments', input),
   cancel: (id: string) => call<BookResponse>('POST', `/api/appointments/${id}/cancel`),
@@ -67,9 +97,14 @@ export const api = {
 
   // Administración
   adminSummary: () => call<Summary>('GET', '/api/admin/summary'),
+  adminCalendar: (month: string) => call<Calendar>('GET', `/api/admin/calendar?month=${encodeURIComponent(month)}`),
   adminAppointments: (q: { date?: string; pending?: boolean }) =>
     call<AdminAppointment[]>('GET', q.pending ? '/api/admin/appointments?pending=true' : `/api/admin/appointments?date=${q.date}`),
   adminSetStatus: (id: string, status: Status) => call<BookResponse>('POST', `/api/admin/appointments/${id}/status`, { status }),
   adminUsers: () => call<AdminUser[]>('GET', '/api/admin/users'),
-  adminSetActive: (id: string, active: boolean) => call<{ id: string; active: boolean }>('POST', `/api/admin/users/${id}/active`, { active })
+  adminUpdateUser: (id: string, input: AdminUserInput) => call<User>('PUT', `/api/admin/users/${id}`, input),
+  adminSetActive: (id: string, active: boolean) => call<{ id: string; active: boolean }>('POST', `/api/admin/users/${id}/active`, { active }),
+  adminAddVehicle: (userId: string, v: VehicleInput) => call<User>('POST', `/api/admin/users/${userId}/vehicles`, v),
+  adminUpdateVehicle: (userId: string, id: string, v: VehicleInput) => call<User>('PUT', `/api/admin/users/${userId}/vehicles/${id}`, v),
+  adminDeleteVehicle: (userId: string, id: string) => call<User>('DELETE', `/api/admin/users/${userId}/vehicles/${id}`)
 }

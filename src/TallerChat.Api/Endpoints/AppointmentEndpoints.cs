@@ -11,8 +11,9 @@ public static class AppointmentEndpoints
     {
         var g = app.MapGroup("/api/appointments");
 
-        // La disponibilidad es pública: sirve para ver huecos antes de crear la cuenta.
+        // Disponibilidad pública: sirve para ver huecos antes de crear la cuenta.
         g.MapGet("/availability", AvailabilityAsync);
+        g.MapGet("/first-available", FirstAvailableAsync);
         g.MapGet("/services", () => Results.Ok(Catalog.Services));
 
         var mine = g.MapGroup("").RequireAuthorization();
@@ -34,6 +35,9 @@ public static class AppointmentEndpoints
         return result is null ? ApiResults.Error(400, "Esa fecha no está disponible para reservar.") : Results.Ok(result);
     }
 
+    private static async Task<IResult> FirstAvailableAsync(BookingService booking, CancellationToken ct)
+        => Results.Ok(await booking.FirstAvailableAsync(ct));
+
     private static async Task<IResult> MineAsync(ClaimsPrincipal principal, Db db, CancellationToken ct)
     {
         var uid = principal.UserId();
@@ -46,9 +50,6 @@ public static class AppointmentEndpoints
     {
         if (Catalog.Find(req.ServiceId) is not { } service) return ApiResults.Error(400, "Elige un servicio de la lista.");
         if (req.Start is not { } start) return ApiResults.Error(400, "Elige día y hora.");
-        if (!Validation.TryPlate(req.Plate, out var plate)) return ApiResults.Error(400, "La matrícula no es válida.");
-        var vehicle = (req.Vehicle ?? "").Trim();
-        if (vehicle.Length is < 2 or > 60) return ApiResults.Error(400, "Indica marca y modelo del vehículo (2 a 60 caracteres).");
         var notes = string.IsNullOrWhiteSpace(req.Notes) ? null : req.Notes.Trim();
         if (notes is { Length: > 500 }) return ApiResults.Error(400, "Las notas no pueden superar los 500 caracteres.");
 
@@ -56,12 +57,58 @@ public static class AppointmentEndpoints
         var user = await db.Users.Find(u => u.Id == uid).FirstOrDefaultAsync(ct);
         if (user is not { Active: true }) return ApiResults.Error(401, "Sesión no válida.");
 
-        var result = await booking.BookAsync(user, service.Id, start, plate, vehicle, notes, ct);
+        string plate, vehicleName;
+        string? vehicleId = null;
+        var saveVehicle = false;
+
+        if (!string.IsNullOrWhiteSpace(req.VehicleId))
+        {
+            // Vehículo ya guardado en la ficha del cliente.
+            var saved = user.Vehicles.FirstOrDefault(v => v.Id == req.VehicleId);
+            if (saved is null) return ApiResults.Error(400, "Ese vehículo ya no está en tu ficha. Elige otro.");
+            vehicleId = saved.Id;
+            plate = saved.Plate;
+            vehicleName = saved.Describe();
+        }
+        else
+        {
+            // Alta manual: se valida como un vehículo más y se guarda en la ficha si no estaba.
+            if (!Validation.TryVehicle(new VehicleRequest(SplitMake(req.Vehicle), SplitModel(req.Vehicle), req.Plate, null, null, null, null),
+                    null, out var manual, out var problem))
+                return ApiResults.Error(400, problem);
+            plate = manual.Plate;
+            vehicleName = (req.Vehicle ?? "").Trim();
+            if (vehicleName.Length is < 2 or > 60) return ApiResults.Error(400, "Indica marca y modelo del vehículo (2 a 60 caracteres).");
+
+            var existing = user.Vehicles.FirstOrDefault(v => v.Plate == plate);
+            if (existing is not null) { vehicleId = existing.Id; }
+            else if (user.Vehicles.Count < ProfileEndpoints.MaxVehicles) { vehicleId = manual.Id; saveVehicle = true; }
+        }
+
+        var result = await booking.BookAsync(user, service.Id, start, plate, vehicleName, vehicleId, notes, ct);
         if (result.Appointment is null) return ApiResults.Error(result.Status, result.Error ?? "No se pudo reservar la cita.");
+
+        if (saveVehicle)
+            await db.Users.UpdateOneAsync(u => u.Id == uid, Builders<AppUser>.Update.Push(u => u.Vehicles,
+                new Vehicle { Id = vehicleId!, Make = SplitMake(vehicleName) ?? vehicleName, Model = SplitModel(vehicleName) ?? "", Plate = plate }),
+                cancellationToken: CancellationToken.None);
 
         // Con CancellationToken.None: si el cliente cierra la pestaña, el correo de confirmación sale igualmente.
         var sent = await notifier.TrySendAsync(user, result.Appointment, EmailKind.Requested, CancellationToken.None);
         return Results.Json(new BookResponse(ToDto(result.Appointment), sent), statusCode: 201);
+    }
+
+    // "Seat León 1.5 TSI" -> marca "Seat", modelo "León 1.5 TSI".
+    private static string? SplitMake(string? full)
+    {
+        var parts = (full ?? "").Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length == 0 ? null : parts[0];
+    }
+
+    private static string? SplitModel(string? full)
+    {
+        var parts = (full ?? "").Trim().Split(' ', 2, StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length switch { 0 => null, 1 => "", _ => parts[1] };
     }
 
     private static async Task<IResult> CancelAsync(string id, ClaimsPrincipal principal, Db db, Notifier notifier, CancellationToken ct)

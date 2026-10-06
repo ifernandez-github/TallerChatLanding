@@ -6,9 +6,9 @@ import { site } from '../../content/site'
   <footer class="lp-footer">
     <div class="lp-wrap foot-grid">
       <div>
-        <strong class="foot-brand">{{ site.name }}</strong>
-        <p class="foot-note">{{ site.tagline }}</p>
+        <strong class="foot-brand">{{ site.brand.first }}<em>&nbsp;{{ site.brand.second }}</em></strong>
         <p class="foot-note">{{ site.contact.address.line }}, {{ site.contact.address.city }}</p>
+        <p class="foot-note">{{ site.contact.phone }} · {{ site.contact.email }}</p>
       </div>
       <nav class="foot-nav" aria-label="Pie de página">
         <RouterLink to="/servicios">Servicios</RouterLink>
@@ -18,7 +18,7 @@ import { site } from '../../content/site'
         <RouterLink to="/mi-cuenta">Mis citas</RouterLink>
       </nav>
     </div>
-    <div class="lp-wrap wrap-row foot-legal">
+    <div class="lp-wrap foot-legal">
       <span>© {{ new Date().getFullYear() }} {{ site.name }}. Todos los derechos reservados.</span>
       <span>Las respuestas del mecánico interactivo son orientativas y no sustituyen el diagnóstico de un profesional.</span>
     </div>

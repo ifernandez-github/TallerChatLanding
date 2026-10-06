@@ -11,6 +11,7 @@ export const router = createRouter({
   routes: [
     { path: '/', component: () => import('./views/HomeView.vue'), meta: { title: 'Mecánica de precisión, diagnóstico honesto' } },
     { path: '/servicios', component: () => import('./views/ServicesView.vue'), meta: { title: 'Servicios' } },
+    { path: '/servicios/:id', component: () => import('./views/ServiceDetailView.vue'), meta: { title: 'Servicios' } },
     { path: '/nosotros', component: () => import('./views/AboutView.vue'), meta: { title: 'Quiénes somos' } },
     { path: '/contacto', component: () => import('./views/ContactView.vue'), meta: { title: 'Contacto' } },
     { path: '/cita', component: () => import('./views/BookingView.vue'), meta: { title: 'Pedir cita' } },

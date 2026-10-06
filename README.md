@@ -7,8 +7,9 @@ Web de un taller con tres partes: landing, chatbot sobre la base de conocimiento
   llama al modelo y se avisa al usuario.
 - **Citas**: el cliente elige servicio, día y hora en `/cita`; la solicitud queda "pendiente de confirmar" y el taller
   la confirma o cancela desde `/admin`. Cada cambio de estado envía un email (con el evento adjunto en `.ics`).
-- **Cuentas**: registro con email y contraseña; cada cliente ve sus citas (próximas e historial) en `/mi-cuenta`,
-  puede cancelarlas y reenviárselas por email. Todo se guarda en MongoDB Atlas.
+- **Cuentas**: registro con email y contraseña. En `/mi-cuenta` cada cliente ve sus citas (próximas e historial),
+  las cancela, se las reenvía por email, edita sus datos de contacto y dirección, y gestiona sus vehículos
+  (marca, modelo, matrícula, año, kilómetros, combustible y VIN). Todo se guarda en MongoDB Atlas.
 
 ## 1. Requisitos
 - Visual Studio Community 2026 (carga de trabajo "ASP.NET y desarrollo web") o .NET SDK 10
@@ -84,12 +85,21 @@ Abre http://localhost:5173 (Vite redirige `/api` a la API).
 - `/cita` — reserva de cita: servicio → día y hora disponibles → datos del vehículo → confirmación.
 - `/acceso` — iniciar sesión o crear cuenta.
 - `/mi-cuenta` — próximas citas (cancelar, reenviar por email), historial y datos de la cuenta. Requiere sesión.
-- `/admin` — agenda del día (o solo pendientes) con acciones de confirmar/cancelar/completar, y gestión de usuarios
-  (activar/desactivar). Requiere sesión de administrador.
+- `/servicios/<id>` — página de cada servicio: por qué importa, cada cuánto toca, aviso y botón de "Pedir cita"
+  que llega al formulario con ese servicio ya seleccionado.
+- `/admin` — calendario mensual de ocupación con código de colores (libre / parcial / completo / cerrado) y el
+  número de citas de cada día; al pulsar un día se abre su agenda con las acciones de confirmar, cancelar y
+  completar. Segunda pestaña con la ficha completa de cada cliente (datos, dirección, rol y sus vehículos) y
+  activar/desactivar cuentas. Requiere sesión de administrador.
 
-**Personalizar (todo en `frontend/src/content/site.ts`, son datos de ejemplo):** nombre, textos, servicios,
-estadísticas, teléfono, email, horario y dirección. La ubicación del mapa sale de `address.lat` y `address.lng`.
-Actualiza también el JSON-LD de `frontend/index.html` (SEO local) para que coincida.
+**Personalizar (todo en `frontend/src/content/site.ts`, son datos de ejemplo):** nombre y marca (`brand`), textos,
+servicios, estadísticas, teléfono, email, horario y dirección. La ubicación del mapa sale de `address.lat` y
+`address.lng`. Actualiza también el JSON-LD de `frontend/index.html` (SEO local) para que coincida.
+
+**Contenido de cada servicio:** cada entrada de `services` lleva su página completa (`lead`, `why`, `periodicity`
+y `note`). El campo `icon` es el identificador: debe coincidir con `Services/Catalog.cs`, con el icono de
+`Icon.vue` y con el nombre del archivo en `public/img/services/`. Para añadir un servicio nuevo hay que tocar
+esos cuatro sitios.
 
 **Horario y reglas de la agenda** (`appsettings.json` → `Booking`): zona horaria, duración de cada franja
 (`SlotMinutes`), número de elevadores/puestos simultáneos (`Bays`), antelación mínima y máxima, horario de apertura
@@ -98,8 +108,11 @@ entre semana y sábados, y máximo de citas activas por cliente.
 **Datos del taller en los correos** (`appsettings.json` → `Shop`): nombre, dirección, teléfono y la URL pública de
 la web (el botón "Ver mis citas" de los emails).
 
-**Imágenes:** el hero y "Quiénes somos" usan ilustraciones SVG propias (`HeroScene.vue`, `AboutArt.vue`). Para usar
-fotos reales, copia los archivos a `frontend/public/img/` y rellena `heroImage` y `aboutImage` en `site.ts`.
+**Imágenes:** `public/img/hero.jpg` es la foto de portada y `public/img/services/<id>.jpg` la cabecera de cada
+servicio. Esas fotos ya llevan rotulado el nombre del servicio, por eso la cabecera no superpone ningún texto
+encima. "Quiénes somos" compone un mosaico con cuatro de esas fotos; si prefieres una foto propia, ponla en
+`public/img/` y rellena `aboutImage` en `site.ts`. Si `heroImage` se deja vacío, se usa la ilustración SVG de
+respaldo (`HeroScene.vue`).
 
 ## Envío por email
 ### Configurar SMTP
@@ -143,6 +156,8 @@ La API sirve la web y `/api/*` desde el mismo origen. Si la pones detrás de un 
 | Horario, franjas, elevadores y antelación | `Booking:*` en `appsettings.json` |
 | Datos del taller en los correos | `Shop:*` en `appsettings.json` |
 | Catálogo de servicios reservables | `Services/Catalog.cs` (ids deben coincidir con `site.ts`) |
+| Textos de cada página de servicio | `services` en `frontend/src/content/site.ts` |
+| Máximo de vehículos por cliente (10) | `ProfileEndpoints.MaxVehicles` |
 | Administrador inicial / datos de ejemplo | `Seed:*` en user-secrets / `appsettings.Development.json` |
 | Límite de envíos de email del chat (3/hora por IP) | política `email` en `Program.cs` |
 | Límite de reservas (10/hora por usuario) y "enviarme mis citas" (3/hora) | políticas `booking`/`mailme` en `Program.cs` |
@@ -163,11 +178,19 @@ La API sirve la web y `/api/*` desde el mismo origen. Si la pones detrás de un 
   revisa host, puerto, `Smtp:Security` y credenciales.
 - "Ya tienes una cita a esa hora" / "Ese hueco acaba de ocuparse": el índice único de `appointments` está
   funcionando como se espera (evita dobles reservas); el cliente debe elegir otra franja.
+- En `/cita` no aparece ninguna hora para un día: solo se muestran las horas realmente libres. Si el día está lleno
+  o es demasiado próximo (`Booking:MinHoursAhead`), no habrá ninguna. El botón "Coger este hueco" salta directamente
+  al primer hueco libre de toda la agenda.
+- En el log de arranque aparece "No se pudieron crear los índices de MongoDB": la API arranca igualmente, pero sin
+  la protección contra reservas duplicadas. El índice parcial con `$in` necesita MongoDB 7.0 o superior; comprueba
+  también que no exista ya otro índice con el mismo nombre y distintas opciones.
 - No se crea el administrador: revisa que `Seed:AdminEmail` sea un correo válido y `Seed:AdminPassword` tenga 10+
   caracteres con letras y números; el log de arranque avisa si los valores no son válidos.
 
 ## 8. Seguridad y privacidad
 - Contraseñas con PBKDF2-SHA256 (210.000 iteraciones) y sal aleatoria; nunca en texto plano ni en los logs.
+- Los datos personales y los vehículos solo los puede leer y editar su propietario o un administrador; el cliente
+  nunca puede cambiar su rol ni el correo de su cuenta desde la web.
 - Sesión por cookie HttpOnly, `SameSite=Lax`, del mismo origen que la API; sin tokens en `localStorage`.
 - El chat solo lee de MongoDB con un usuario de mínimo privilegio; secretos fuera del repositorio.
 - No se usa `v-html`; el texto del modelo se pinta como texto plano.

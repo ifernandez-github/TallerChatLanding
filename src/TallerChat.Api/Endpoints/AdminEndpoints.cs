@@ -19,10 +19,15 @@ public static class AdminEndpoints
     {
         var g = app.MapGroup("/api/admin").RequireAuthorization("admin");
         g.MapGet("/summary", SummaryAsync);
+        g.MapGet("/calendar", CalendarAsync);
         g.MapGet("/appointments", AppointmentsAsync);
         g.MapPost("/appointments/{id}/status", SetStatusAsync);
         g.MapGet("/users", UsersAsync);
+        g.MapPut("/users/{id}", UpdateUserAsync);
         g.MapPost("/users/{id}/active", SetActiveAsync);
+        g.MapPost("/users/{id}/vehicles", AddVehicleAsync);
+        g.MapPut("/users/{id}/vehicles/{vehicleId}", UpdateVehicleAsync);
+        g.MapDelete("/users/{id}/vehicles/{vehicleId}", DeleteVehicleAsync);
     }
 
     private static async Task<IResult> SummaryAsync(Db db, BookingService booking, CancellationToken ct)
@@ -33,6 +38,20 @@ public static class AdminEndpoints
         var today = await db.Appointments.CountDocumentsAsync(f.Gte(a => a.Start, from) & f.Lt(a => a.Start, to) & f.In(a => a.Status, Statuses.Active), cancellationToken: ct);
         var users = await db.Users.CountDocumentsAsync(u => u.Role == Roles.Client, cancellationToken: ct);
         return Results.Ok(new SummaryDto((int)pending, (int)today, (int)users));
+    }
+
+    /// <summary>Ocupación de todo un mes (?month=AAAA-MM) para el calendario con código de colores.</summary>
+    private static async Task<IResult> CalendarAsync(string? month, BookingService booking, CancellationToken ct)
+    {
+        var today = booking.TodayLocal();
+        int year = today.Year, m = today.Month;
+        if (!string.IsNullOrWhiteSpace(month))
+        {
+            if (!DateOnly.TryParseExact(month + "-01", "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+                return ApiResults.Error(400, "Mes no válido (usa AAAA-MM).");
+            year = parsed.Year; m = parsed.Month;
+        }
+        return Results.Ok(await booking.CalendarAsync(year, m, ct));
     }
 
     /// <summary>?date=AAAA-MM-DD → agenda del día; ?pending=true → todas las pendientes futuras.</summary>
@@ -57,7 +76,7 @@ public static class AdminEndpoints
         return Results.Ok(items.Select(a =>
         {
             users.TryGetValue(a.UserId, out var u);
-            return new AdminAppointmentDto(a.Id, u?.Name ?? "(usuario eliminado)", u?.Email ?? "", u?.Phone, a.ServiceId,
+            return new AdminAppointmentDto(a.Id, a.UserId, u?.Name ?? "(usuario eliminado)", u?.Email ?? "", u?.Phone, a.ServiceId,
                 Catalog.Find(a.ServiceId)?.Name ?? a.ServiceId, a.Start, a.Bay, a.Plate, a.Vehicle, a.Notes, a.Status);
         }));
     }
@@ -70,11 +89,16 @@ public static class AdminEndpoints
         if (from.Length == 0) return ApiResults.Error(400, "Estado no válido.");
 
         var f = Builders<Appointment>.Filter;
+        var filter = f.Eq(a => a.Id, id) & f.In(a => a.Status, from);
+        if (target == Statuses.Confirmed) filter &= f.Gt(a => a.Start, DateTime.UtcNow);
+
         var updated = await db.Appointments.FindOneAndUpdateAsync(
-            f.Eq(a => a.Id, id) & f.In(a => a.Status, from),
+            filter,
             Builders<Appointment>.Update.Set(a => a.Status, target).Set(a => a.UpdatedAt, DateTime.UtcNow),
             new FindOneAndUpdateOptions<Appointment> { ReturnDocument = ReturnDocument.After }, ct);
-        if (updated is null) return ApiResults.Error(409, "Ese cambio de estado no es posible para la cita actual.");
+        if (updated is null) return ApiResults.Error(409, target == Statuses.Confirmed
+            ? "No se puede confirmar: la cita ya ha pasado o no está pendiente."
+            : "Ese cambio de estado no es posible para la cita actual.");
 
         var sent = false;
         if (target is Statuses.Confirmed or Statuses.Cancelled)
@@ -93,9 +117,31 @@ public static class AdminEndpoints
             .Group(a => a.UserId, g => new { UserId = g.Key, Count = g.Count() })
             .ToListAsync(ct);
         var byUser = counts.ToDictionary(c => c.UserId, c => c.Count);
-        return Results.Ok(users.Select(u =>
-            new AdminUserDto(u.Id, u.Name, u.Email, u.Phone, u.Role, u.Active, u.CreatedAt, byUser.GetValueOrDefault(u.Id))));
+        return Results.Ok(users.Select(u => u.ToAdminDto(byUser.GetValueOrDefault(u.Id))));
     }
+
+    /// <summary>Edita cualquier dato de la ficha de un cliente. Un administrador no puede quitarse a sí mismo el rol.</summary>
+    private static async Task<IResult> UpdateUserAsync(string id, AdminUserRequest req, ClaimsPrincipal principal, Db db,
+        IMemoryCache cache, CancellationToken ct)
+    {
+        if (!ObjectId.TryParse(id, out _)) return ApiResults.Error(404, "Usuario no encontrado.");
+        var role = req.Role;
+        if (id == principal.UserId() && role is not null && role != Roles.Admin)
+            return ApiResults.Error(400, "No puedes quitarte a ti mismo el rol de administrador.");
+
+        var result = await UserAdmin.UpdateProfileAsync(db, id, req.Name, req.Email, req.Phone, req.Address, role, ct);
+        cache.Remove(AuthSetup.CacheKey(id)); // si ha cambiado el rol, la sesión debe revalidarse enseguida
+        return result;
+    }
+
+    private static Task<IResult> AddVehicleAsync(string id, VehicleRequest req, Db db, CancellationToken ct)
+        => UserAdmin.AddVehicleAsync(db, id, req, ct);
+
+    private static Task<IResult> UpdateVehicleAsync(string id, string vehicleId, VehicleRequest req, Db db, CancellationToken ct)
+        => UserAdmin.UpdateVehicleAsync(db, id, vehicleId, req, ct);
+
+    private static Task<IResult> DeleteVehicleAsync(string id, string vehicleId, Db db, CancellationToken ct)
+        => UserAdmin.DeleteVehicleAsync(db, id, vehicleId, ct);
 
     private static async Task<IResult> SetActiveAsync(string id, ActiveRequest req, ClaimsPrincipal principal, Db db,
         IMemoryCache cache, CancellationToken ct)

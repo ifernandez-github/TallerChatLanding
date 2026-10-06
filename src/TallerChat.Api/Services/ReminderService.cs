@@ -40,9 +40,10 @@ public sealed class ReminderService(Db db, Notifier notifier, ILogger<ReminderSe
             var user = await db.Users.Find(u => u.Id == claimed.UserId).FirstOrDefaultAsync(ct);
             if (user is not { Active: true }) continue;
 
-            if (!await notifier.TrySendAsync(user, claimed, EmailKind.Reminder, ct))
+            // Solo un fallo real de envío se reintenta. Si el aviso se omite (cliente de ejemplo),
+            // la cita se queda marcada para no volver a intentarlo en cada pasada.
+            if (await notifier.SendAsync(user, claimed, EmailKind.Reminder, ct) == SendResult.Failed)
             {
-                // No se pudo enviar: se devuelve a "sin avisar" para reintentarlo en la próxima pasada.
                 failed.Add(claimed.Id);
                 await db.Appointments.UpdateOneAsync(a => a.Id == claimed.Id,
                     Builders<Appointment>.Update.Set(a => a.ReminderSent, false), cancellationToken: ct);

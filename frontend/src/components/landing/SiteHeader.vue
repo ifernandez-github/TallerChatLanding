@@ -18,20 +18,21 @@ const links = computed(() => [
   { to: '/contacto', label: 'Contacto' },
   ...(isAdmin.value ? [{ to: '/admin', label: 'Administración' }] : [])
 ])
-// En la portada la cabecera es transparente sobre el hero; en el resto de páginas siempre es opaca.
-const solid = computed(() => scrolled.value || menu.value || route.path !== '/')
 const account = computed(() => (user.value ? { to: '/mi-cuenta', label: 'Mis citas' } : { to: '/acceso', label: 'Acceder' }))
 
-const onScroll = () => { scrolled.value = window.scrollY > 40 }
+const onScroll = () => { scrolled.value = window.scrollY > 16 }
 onMounted(() => { onScroll(); window.addEventListener('scroll', onScroll, { passive: true }) })
 onBeforeUnmount(() => window.removeEventListener('scroll', onScroll))
 watch(() => route.fullPath, () => { menu.value = false })
 </script>
 
 <template>
-  <header :class="['lp-nav', { scrolled: solid, open: menu }]">
+  <header :class="['lp-nav', { scrolled: scrolled || menu }]">
     <div class="lp-wrap nav-in">
-      <RouterLink to="/" class="brand"><span class="logo-mark"><Icon name="wrench" :size="20" /></span>{{ site.name }}</RouterLink>
+      <RouterLink to="/" class="brand">
+        <span class="logo-mark"><Icon name="wrench" :size="20" /></span>
+        <span class="brand-text">{{ site.brand.first }}<em>&nbsp;{{ site.brand.second }}</em></span>
+      </RouterLink>
       <nav id="main-nav" :class="{ show: menu }" aria-label="Principal">
         <RouterLink v-for="l in links" :key="l.to" :to="l.to">{{ l.label }}</RouterLink>
         <RouterLink :to="account.to" class="nav-account-link">{{ account.label }}</RouterLink>

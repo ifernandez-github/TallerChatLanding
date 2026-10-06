@@ -17,6 +17,7 @@ public sealed class BookingService(Db db, IOptions<BookingOptions> options)
     private readonly TimeZoneInfo tz = FindZone(options.Value.TimeZone);
 
     public int SlotMinutes => o.SlotMinutes;
+    public int MaxDaysAhead => o.MaxDaysAhead;
 
     private static TimeZoneInfo FindZone(string id)
     {
@@ -33,6 +34,7 @@ public sealed class BookingService(Db db, IOptions<BookingOptions> options)
         d.Kind == DateTimeKind.Unspecified ? DateTime.SpecifyKind(d, DateTimeKind.Utc) : d.ToUniversalTime();
 
     private static TimeOnly T(string s) => TimeOnly.Parse(s, CultureInfo.InvariantCulture);
+    private static string Iso(DateOnly d) => d.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 
     /// <summary>Horario de apertura del día (null = cerrado). Los festivos no se contemplan.</summary>
     public (TimeOnly Open, TimeOnly Close)? Hours(DayOfWeek d) => d switch
@@ -47,6 +49,9 @@ public sealed class BookingService(Db db, IOptions<BookingOptions> options)
     public (DateTime FromUtc, DateTime ToUtc) DayRangeUtc(DateOnly day) => (
         TimeZoneInfo.ConvertTimeToUtc(day.ToDateTime(TimeOnly.MinValue), tz),
         TimeZoneInfo.ConvertTimeToUtc(day.AddDays(1).ToDateTime(TimeOnly.MinValue), tz));
+
+    public string TimeLabel(DateTime utc) =>
+        TimeZoneInfo.ConvertTimeFromUtc(AsUtc(utc), tz).ToString("HH:mm", CultureInfo.InvariantCulture);
 
     /// <summary>Inicios de franja (UTC) de un día local.</summary>
     public IEnumerable<DateTime> SlotsUtc(DateOnly day)
@@ -64,7 +69,7 @@ public sealed class BookingService(Db db, IOptions<BookingOptions> options)
     /// <summary>Franja nº <paramref name="index"/> del primer día laborable desde <paramref name="day"/> (datos de ejemplo).</summary>
     public DateTime SlotAt(DateOnly day, int index)
     {
-        while (Hours(day.DayOfWeek) is null) day = day.AddDays(1);
+        while (Hours(day.DayOfWeek) is null || !SlotsUtc(day).Any()) day = day.AddDays(1);
         var slots = SlotsUtc(day).ToList();
         return slots[Math.Min(index, slots.Count - 1)];
     }
@@ -75,6 +80,16 @@ public sealed class BookingService(Db db, IOptions<BookingOptions> options)
         return $"{Dias[(int)l.DayOfWeek]} {l.Day} de {Meses[l.Month - 1]} de {l.Year}, {l.ToString("HH:mm", CultureInfo.InvariantCulture)}";
     }
 
+    /// <summary>Citas activas agrupadas por hora de inicio en un rango (una consulta para todo el rango).</summary>
+    private async Task<Dictionary<DateTime, int>> TakenAsync(DateTime fromUtc, DateTime toUtc, CancellationToken ct)
+    {
+        var f = Builders<Appointment>.Filter;
+        var taken = await db.Appointments
+            .Find(f.Gte(a => a.Start, fromUtc) & f.Lt(a => a.Start, toUtc) & f.In(a => a.Status, Statuses.Active))
+            .Project(a => a.Start).ToListAsync(ct);
+        return taken.GroupBy(d => d).ToDictionary(g => g.Key, g => g.Count());
+    }
+
     /// <summary>Disponibilidad de un día, o null si la fecha está fuera del rango reservable.</summary>
     public async Task<AvailabilityDto?> AvailabilityAsync(DateOnly day, CancellationToken ct)
     {
@@ -83,24 +98,70 @@ public sealed class BookingService(Db db, IOptions<BookingOptions> options)
 
         var slots = SlotsUtc(day).ToList();
         var (from, to) = DayRangeUtc(day);
-        var f = Builders<Appointment>.Filter;
-        var taken = await db.Appointments
-            .Find(f.Gte(a => a.Start, from) & f.Lt(a => a.Start, to) & f.In(a => a.Status, Statuses.Active))
-            .Project(a => a.Start).ToListAsync(ct);
-        var counts = taken.GroupBy(d => d).ToDictionary(g => g.Key, g => g.Count());
+        var counts = await TakenAsync(from, to, ct);
 
         var earliest = DateTime.UtcNow.AddHours(o.MinHoursAhead);
         var list = slots.Select(s =>
         {
             var free = Math.Max(0, o.Bays - counts.GetValueOrDefault(s));
-            var label = TimeZoneInfo.ConvertTimeFromUtc(s, tz).ToString("HH:mm", CultureInfo.InvariantCulture);
-            return new SlotDto(s, label, free, free > 0 && s >= earliest);
+            return new SlotDto(s, TimeLabel(s), free, free > 0 && s >= earliest);
         }).ToList();
-        return new AvailabilityDto(day.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), list.Count == 0, list);
+        return new AvailabilityDto(Iso(day), list.Count == 0, list);
+    }
+
+    /// <summary>Primer hueco libre a partir de ahora, respetando la antelación mínima.</summary>
+    public async Task<FirstSlotDto> FirstAvailableAsync(CancellationToken ct)
+    {
+        var today = TodayLocal();
+        var last = today.AddDays(o.MaxDaysAhead);
+        var (from, _) = DayRangeUtc(today);
+        var (_, to) = DayRangeUtc(last);
+        var counts = await TakenAsync(from, to, ct);
+        var earliest = DateTime.UtcNow.AddHours(o.MinHoursAhead);
+
+        for (var day = today; day <= last; day = day.AddDays(1))
+            foreach (var slot in SlotsUtc(day))
+                if (slot >= earliest && o.Bays - counts.GetValueOrDefault(slot) > 0)
+                    return new FirstSlotDto(true, Iso(day), slot, TimeLabel(slot));
+
+        return new FirstSlotDto(false, null, null, null);
+    }
+
+    /// <summary>Ocupación día a día de un mes, para el calendario de administración.</summary>
+    public async Task<CalendarDto> CalendarAsync(int year, int month, CancellationToken ct)
+    {
+        var first = new DateOnly(year, month, 1);
+        var last = first.AddMonths(1).AddDays(-1);
+        var (from, _) = DayRangeUtc(first);
+        var (_, to) = DayRangeUtc(last);
+
+        var f = Builders<Appointment>.Filter;
+        var items = await db.Appointments
+            .Find(f.Gte(a => a.Start, from) & f.Lt(a => a.Start, to) & f.In(a => a.Status, Statuses.Booked))
+            .Project(a => new { a.Start, a.Status }).ToListAsync(ct);
+
+        // Las citas se agrupan por el día local del taller, no por el día UTC.
+        var byDay = items
+            .GroupBy(a => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(AsUtc(a.Start), tz)))
+            .ToDictionary(g => g.Key, g => (Total: g.Count(), Pending: g.Count(x => x.Status == Statuses.Pending)));
+
+        var today = TodayLocal();
+        var days = new List<CalendarDayDto>();
+        for (var day = first; day <= last; day = day.AddDays(1))
+        {
+            var capacity = SlotsUtc(day).Count() * o.Bays;
+            var (total, pending) = byDay.GetValueOrDefault(day);
+            var status = capacity == 0 ? "closed"
+                : total == 0 ? "free"
+                : total >= capacity ? "full"
+                : "partial";
+            days.Add(new CalendarDayDto(Iso(day), capacity == 0, day < today, total, capacity, pending, status));
+        }
+        return new CalendarDto($"{year:D4}-{month:D2}", days);
     }
 
     public async Task<BookResult> BookAsync(AppUser user, string serviceId, DateTime start, string plate, string vehicle,
-        string? notes, CancellationToken ct)
+        string? vehicleId, string? notes, CancellationToken ct)
     {
         var startUtc = AsUtc(start);
         var day = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(startUtc, tz));
@@ -126,14 +187,14 @@ public sealed class BookingService(Db db, IOptions<BookingOptions> options)
             var a = new Appointment
             {
                 UserId = user.Id, ServiceId = serviceId, Start = startUtc, Bay = bay,
-                Plate = plate, Vehicle = vehicle, Notes = notes, Status = Statuses.Pending
+                VehicleId = vehicleId, Plate = plate, Vehicle = vehicle, Notes = notes, Status = Statuses.Pending
             };
             try
             {
                 await db.Appointments.InsertOneAsync(a, cancellationToken: ct);
                 return new(a, 201, null);
             }
-            catch (MongoWriteException ex) when (ex.WriteError.Category == ServerErrorCategory.DuplicateKey) { }
+            catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey) { }
         }
         return new(null, 409, "Ese hueco acaba de ocuparse. Elige otra hora.");
     }

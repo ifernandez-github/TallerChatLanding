@@ -1,11 +1,16 @@
-import { onMounted, watch } from 'vue'
+import { nextTick, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 
 let io: IntersectionObserver | null = null
 
-// Anima la aparición de los elementos con clase .reveal al entrar en pantalla.
+/**
+ * Anima la aparición de los elementos con clase .reveal al entrar en pantalla.
+ * Es idempotente: solo observa los que aún no se han mostrado, así que se puede llamar
+ * tantas veces como haga falta (al montar cada página, al cambiar de ruta...).
+ */
 export function observeReveals() {
   const els = document.querySelectorAll<HTMLElement>('.reveal:not(.in)')
+  if (!els.length) return
   if (!('IntersectionObserver' in window) || matchMedia('(prefers-reduced-motion: reduce)').matches) {
     els.forEach((e) => e.classList.add('in'))
     return
@@ -19,9 +24,9 @@ export function observeReveals() {
   els.forEach((e) => io!.observe(e))
 }
 
-// Con router, cada página trae sus propios .reveal: se vuelven a observar tras cada cambio de ruta.
 export function useReveal() {
   const route = useRoute()
-  onMounted(observeReveals)
-  watch(() => route.fullPath, observeReveals, { flush: 'post' })
+  // Red de seguridad: una página ya cargada que cambia solo de parámetro no se vuelve a montar.
+  onMounted(() => nextTick(observeReveals))
+  watch(() => route.fullPath, () => nextTick(observeReveals), { flush: 'post' })
 }

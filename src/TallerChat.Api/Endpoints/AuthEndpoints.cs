@@ -16,8 +16,6 @@ public static class AuthEndpoints
         g.MapGet("/me", MeAsync).RequireAuthorization();
     }
 
-    private static UserDto ToDto(AppUser u) => new(u.Id, u.Name, u.Email, u.Phone, u.Role);
-
     private static async Task<IResult> RegisterAsync(RegisterRequest req, Db db, HttpContext http, CancellationToken ct)
     {
         var name = (req.Name ?? "").Trim();
@@ -29,13 +27,13 @@ public static class AuthEndpoints
 
         var user = new AppUser { Name = name, Email = email, Phone = phone, PasswordHash = PasswordHasher.Hash(req.Password!) };
         try { await db.Users.InsertOneAsync(user, cancellationToken: ct); }
-        catch (MongoWriteException ex) when (ex.WriteError.Category == ServerErrorCategory.DuplicateKey)
+        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
         {
             return ApiResults.Error(409, "Ya existe una cuenta con ese correo. Prueba a iniciar sesión.");
         }
 
         await AuthSetup.SignInAsync(http, user);
-        return Results.Json(ToDto(user), statusCode: 201);
+        return Results.Json(user.ToDto(), statusCode: 201);
     }
 
     private static async Task<IResult> LoginAsync(LoginRequest req, Db db, HttpContext http, CancellationToken ct)
@@ -50,7 +48,7 @@ public static class AuthEndpoints
         if (!user.Active) return ApiResults.Error(403, "Tu cuenta está desactivada. Contacta con el taller.");
 
         await AuthSetup.SignInAsync(http, user);
-        return Results.Ok(ToDto(user));
+        return Results.Ok(user.ToDto());
     }
 
     private static async Task<IResult> LogoutAsync(HttpContext http)
@@ -63,6 +61,6 @@ public static class AuthEndpoints
     {
         var id = principal.UserId();
         var user = await db.Users.Find(u => u.Id == id).FirstOrDefaultAsync(ct);
-        return user is { Active: true } ? Results.Ok(ToDto(user)) : ApiResults.Error(401, "Sesión no válida.");
+        return user is { Active: true } ? Results.Ok(user.ToDto()) : ApiResults.Error(401, "Sesión no válida.");
     }
 }
