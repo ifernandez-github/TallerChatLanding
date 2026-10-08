@@ -18,6 +18,7 @@ builder.Services.Configure<SmtpOptions>(cfg.GetSection("Smtp"));
 builder.Services.Configure<BookingOptions>(cfg.GetSection("Booking"));
 builder.Services.Configure<ShopOptions>(cfg.GetSection("Shop"));
 builder.Services.Configure<SeedOptions>(cfg.GetSection("Seed"));
+builder.Services.Configure<AuthOptions>(cfg.GetSection("Auth"));
 builder.Services.AddMemoryCache();
 builder.Services.AddSingleton<EmailService>();
 
@@ -32,6 +33,8 @@ builder.Services.AddSingleton<KnowledgeService>();
 builder.Services.AddSingleton<Db>();
 builder.Services.AddSingleton<BookingService>();
 builder.Services.AddSingleton<Notifier>();
+builder.Services.AddSingleton<TokenService>();
+builder.Services.AddSingleton<AccountDeletion>();
 builder.Services.AddHostedService<StartupService>();   // índices, administrador y datos de ejemplo
 builder.Services.AddHostedService<ReminderService>();  // recordatorios 24 h antes
 builder.Services.AddTallerAuth();
@@ -45,7 +48,9 @@ builder.Services.AddHttpClient<GeminiClient>((sp, http) =>
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
-    p.WithOrigins(cfg.GetSection("Cors:Origins").Get<string[]>() ?? []).AllowAnyHeader().AllowAnyMethod()));
+    p.WithOrigins(cfg.GetSection("Cors:Origins").Get<string[]>() ?? [])
+     .AllowAnyHeader().AllowAnyMethod()
+     .AllowCredentials())); // la sesión viaja en cookie: sin esto el navegador la descarta
 
 static string Ip(HttpContext c) => c.Connection.RemoteIpAddress?.ToString() ?? "anon";
 // Si hay sesión, el límite es por usuario; si no, por IP.
@@ -64,6 +69,9 @@ builder.Services.AddRateLimiter(o =>
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1) }));
     o.AddPolicy("booking", ctx => RateLimitPartition.GetFixedWindowLimiter(Who(ctx),
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromHours(1) }));
+    // Baja de cuentas: por usuario, no por IP. Pocas peticiones bastan (abrir el aviso + confirmar).
+    o.AddPolicy("account", ctx => RateLimitPartition.GetFixedWindowLimiter(Who(ctx),
+        _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(10) }));
     // "Enviarme mis citas por email": va siempre a la dirección de la cuenta, aun así se limita.
     o.AddPolicy("mailme", ctx => RateLimitPartition.GetFixedWindowLimiter(Who(ctx),
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 3, Window = TimeSpan.FromHours(1) }));
@@ -88,8 +96,10 @@ if (app.Environment.IsDevelopment())
 app.MapChatEndpoints();
 app.MapEmailEndpoints();
 app.MapAuthEndpoints();
+app.MapProfileEndpoints();
 app.MapAppointmentEndpoints();
 app.MapAdminEndpoints();
-app.MapFallbackToFile("index.html");
+// El SPA responde a cualquier ruta MENOS /api/*: así una ruta de API inexistente devuelve 404 y no HTML.
+app.MapFallbackToFile("{*path:regex(^(?!api/).*$)}", "index.html");
 
 app.Run();

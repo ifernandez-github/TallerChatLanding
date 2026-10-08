@@ -10,19 +10,22 @@ const { openChat } = useChat()
   <section id="servicios" class="lp-section alt">
     <div class="lp-wrap">
       <div class="svc-head reveal">
-        <h2 class="lp-h2">Servicios</h2>
-        <p class="lp-lead">Todo lo que tu coche necesita, de la revisión periódica a la avería más rebuscada.</p>
+        <p class="eyebrow">Servicios</p>
+        <h2 class="lp-h2">Todo lo que tu coche necesita</h2>
+        <p class="lp-lead">De la revisión periódica a la avería más rebuscada. Entra en cada servicio y te contamos por qué importa y cada cuánto toca.</p>
       </div>
 
       <div class="svc-grid">
-        <article v-for="(s, i) in site.services" :key="s.title" class="svc-card reveal" :style="{ '--d': `${(i % 4) * 60}ms` }">
-          <div class="svc-ico"><Icon :name="s.icon" :size="26" /></div>
-          <h3>{{ s.title }}</h3>
-          <p>{{ s.text }}</p>
-          <RouterLink :to="{ path: '/cita', query: { servicio: s.icon } }" class="svc-link">
-            Pedir cita <Icon name="arrow" :size="16" />
-          </RouterLink>
-        </article>
+        <RouterLink v-for="(s, i) in site.services" :key="s.icon" :to="`/servicios/${s.icon}`"
+          class="svc-card reveal" :style="{ '--d': `${(i % 4) * 60}ms` }">
+          <img :src="s.image" :alt="s.title" class="svc-photo" loading="lazy" />
+          <div class="svc-body">
+            <span class="svc-ico"><Icon :name="s.icon" :size="22" /></span>
+            <h3>{{ s.title }}</h3>
+            <p>{{ s.text }}</p>
+            <span class="svc-link">Ver servicio <Icon name="arrow" :size="16" /></span>
+          </div>
+        </RouterLink>
       </div>
 
       <div class="cta-band reveal">

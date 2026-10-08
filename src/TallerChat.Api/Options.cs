@@ -69,6 +69,23 @@ public sealed class ShopOptions
     public string Phone { get; set; } = "+34 910 000 000";
     /// <summary>URL pública de la web (enlace "Ver mis citas" de los correos).</summary>
     public string PublicBaseUrl { get; set; } = "http://localhost:5173";
+    /// <summary>
+    /// Dominio de ejemplo de las cuentas del taller (como "torque.es" en "admin@torque.es"): no es un buzón real,
+    /// igual que "@demo.taller" para los clientes de ejemplo. Los avisos para una cuenta con este dominio se
+    /// mandan en su lugar a Smtp:From, que sí es una dirección real.
+    /// </summary>
+    public string PlaceholderDomain { get; set; } = "torque.es";
+}
+
+/// <summary>Caducidad de los enlaces que se envían por correo y freno al reenvío.</summary>
+public sealed class AuthOptions
+{
+    /// <summary>Horas que vale el enlace de confirmación de la cuenta.</summary>
+    public int VerifyTokenHours { get; set; } = 48;
+    /// <summary>Minutos que vale el enlace para elegir una contraseña nueva.</summary>
+    public int ResetTokenMinutes { get; set; } = 60;
+    /// <summary>Espera mínima entre dos correos de cuenta al mismo destinatario.</summary>
+    public int EmailCooldownMinutes { get; set; } = 2;
 }
 
 /// <summary>Datos iniciales. Las credenciales del administrador van en user-secrets, nunca en git.</summary>

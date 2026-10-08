@@ -6,7 +6,13 @@ using MongoDB.Driver;
 
 namespace TallerChat.Api;
 
-public sealed record UserState(bool Active, string Role);
+public sealed record UserState(bool Active, string Role, string Stamp);
+
+public static class TallerClaims
+{
+    /// <summary>Sello de seguridad: si cambia (al restablecer la contraseña), las sesiones abiertas dejan de valer.</summary>
+    public const string Stamp = "taller:stamp";
+}
 
 /// <summary>
 /// Sesión por cookie HttpOnly (SameSite=Lax) en el mismo origen que la web: el JavaScript no puede leerla y las
@@ -41,6 +47,7 @@ public static class AuthSetup
     {
         var id = ctx.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
         var role = ctx.Principal?.FindFirstValue(ClaimTypes.Role);
+        var stamp = ctx.Principal?.FindFirstValue(TallerClaims.Stamp) ?? "";
         if (id is null) { ctx.RejectPrincipal(); return; }
 
         var cache = ctx.HttpContext.RequestServices.GetRequiredService<IMemoryCache>();
@@ -48,11 +55,11 @@ public static class AuthSetup
         {
             var db = ctx.HttpContext.RequestServices.GetRequiredService<Db>();
             var u = await db.Users.Find(x => x.Id == id).FirstOrDefaultAsync(ctx.HttpContext.RequestAborted);
-            state = new UserState(u is { Active: true }, u?.Role ?? "");
+            state = new UserState(u is { Active: true, EmailVerified: true }, u?.Role ?? "", u?.SecurityStamp ?? "");
             cache.Set(CacheKey(id), state, TimeSpan.FromMinutes(1));
         }
 
-        if (state is null || !state.Active || state.Role != role)
+        if (state is null || !state.Active || state.Role != role || state.Stamp != stamp)
         {
             ctx.RejectPrincipal();
             await ctx.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
@@ -62,7 +69,8 @@ public static class AuthSetup
     public static async Task SignInAsync(HttpContext http, AppUser user)
     {
         var identity = new ClaimsIdentity(
-            [new Claim(ClaimTypes.NameIdentifier, user.Id), new Claim(ClaimTypes.Role, user.Role)],
+            [new Claim(ClaimTypes.NameIdentifier, user.Id), new Claim(ClaimTypes.Role, user.Role),
+             new Claim(TallerClaims.Stamp, user.SecurityStamp)],
             CookieAuthenticationDefaults.AuthenticationScheme);
         await http.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme, new ClaimsPrincipal(identity),
             new AuthenticationProperties { IsPersistent = true, ExpiresUtc = DateTimeOffset.UtcNow.AddDays(7) });
