@@ -13,7 +13,7 @@ public static class AppointmentEmails
 {
     private const string Brand = "#0e8f80", Muted = "#5c7080";
 
-    private static string E(string? s) => WebUtility.HtmlEncode(s ?? "");
+    private static string E(string? s) => EmailLayout.E(s);
 
     public static RenderedEmail Render(EmailKind kind, AppUser user, Appointment a, BookingService booking, ShopOptions shop)
     {
@@ -46,6 +46,41 @@ public static class AppointmentEmails
         return new RenderedEmail(subject, html, text.ToString(), ics);
     }
 
+    /// <summary>
+    /// Aviso a la administración: nueva solicitud o cancelación. El cliente nunca ve este correo, y por eso
+    /// lleva datos que el correo del cliente no necesita (su nombre, su correo, su teléfono).
+    /// </summary>
+    public static RenderedEmail RenderAdmin(EmailKind kind, AppUser customer, Appointment a, BookingService booking, ShopOptions shop)
+    {
+        var service = Catalog.Find(a.ServiceId)?.Name ?? a.ServiceId;
+        var when = booking.Describe(a.Start);
+        var (subject, title, intro) = kind == EmailKind.Cancelled
+            ? ($"Cita cancelada: {when} · {shop.Name}", "Un cliente ha cancelado una cita",
+               "El cliente ha cancelado esta cita desde su área personal. El hueco ya está libre en la agenda.")
+            : ($"Nueva solicitud de cita: {when} · {shop.Name}", "Nueva solicitud de cita",
+               "Un cliente ha pedido cita. Revísala y confírmala (o recházala) desde la administración.");
+
+        var rows = new List<(string Label, string Value)> { ("Cliente", customer.Name), ("Correo", customer.Email) };
+        if (!string.IsNullOrWhiteSpace(customer.Phone)) rows.Add(("Teléfono", customer.Phone));
+        rows.Add(("Servicio", service));
+        rows.Add(("Fecha y hora", when));
+        rows.Add(("Vehículo", $"{a.Vehicle} · {a.Plate}"));
+        if (!string.IsNullOrWhiteSpace(a.Notes)) rows.Add(("Notas del cliente", a.Notes));
+
+        var link = AdminLink(shop, booking, a);
+        var html = EmailLayout.Wrap(shop, title, RowsHtml(intro, rows), link, "Ver en la agenda",
+            "Aviso automático para la administración del taller.");
+        var text = new StringBuilder($"{title.ToUpperInvariant()}\n\n{intro}\n\n");
+        foreach (var (l, v) in rows) text.Append($"{l}: {v}\n");
+        text.Append($"\nVer en la agenda: {link}\n");
+
+        return new RenderedEmail(subject, html, text.ToString(), null);
+    }
+
+    /// <summary>Enlace directo a la agenda de administración, abierta ya en el día de esa cita.</summary>
+    private static string AdminLink(ShopOptions shop, BookingService booking, Appointment a) =>
+        $"{shop.PublicBaseUrl.TrimEnd('/')}/admin?fecha={booking.LocalDateIso(a.Start)}&cita={a.Id}";
+
     public static RenderedEmail RenderSummary(AppUser user, IReadOnlyList<Appointment> upcoming, BookingService booking, ShopOptions shop)
     {
         var intro = upcoming.Count == 1 ? "Esta es tu próxima cita en el taller." : $"Estas son tus {upcoming.Count} próximas citas en el taller.";
@@ -66,26 +101,20 @@ public static class AppointmentEmails
         return new RenderedEmail($"Tus próximas citas · {shop.Name}", Wrap(shop, "Tus próximas citas", body), t.ToString(), null);
     }
 
-    private static string Layout(ShopOptions shop, string title, string intro, List<(string Label, string Value)> rows)
+    private static string Layout(ShopOptions shop, string title, string intro, List<(string Label, string Value)> rows) =>
+        Wrap(shop, title, RowsHtml(intro, rows));
+
+    private static string RowsHtml(string intro, List<(string Label, string Value)> rows)
     {
         var b = new StringBuilder($"<p style=\"margin:0 0 14px;line-height:1.6\">{E(intro)}</p>");
         foreach (var (l, v) in rows)
             b.Append($"<div style=\"border-top:1px solid #e2e8ec;padding:10px 0\"><p style=\"margin:0;color:{Muted};font-size:13px\">{E(l)}</p><p style=\"margin:0;font-weight:600\">{E(v)}</p></div>");
-        return Wrap(shop, title, b.ToString());
+        return b.ToString();
     }
 
-    private static string Wrap(ShopOptions shop, string title, string body)
-    {
-        var link = E(shop.PublicBaseUrl.TrimEnd('/') + "/mi-cuenta");
-        return "<div style=\"background:#f3f5f7;padding:24px 12px;font-family:'Segoe UI',Arial,sans-serif;color:#0f1b24\">" +
-               "<div style=\"max-width:600px;margin:0 auto\">" +
-               $"<h1 style=\"font-size:20px;margin:0 0 16px;color:{Brand}\">{E(title)}</h1>" +
-               $"<div style=\"background:#fff;border:1px solid #e2e8ec;border-radius:14px;padding:18px 20px\">{body}" +
-               $"<p style=\"margin:18px 0 0\"><a href=\"{link}\" style=\"display:inline-block;background:{Brand};color:#fff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:10px\">Ver mis citas</a></p></div>" +
-               $"<p style=\"color:{Muted};font-size:12px;line-height:1.5\">{E(shop.Name)} · {E(shop.Address)} · {E(shop.Phone)}<br>" +
-               "Recibes este correo porque tienes una cuenta en la web del taller. Si no esperabas este mensaje, puedes ignorarlo.</p>" +
-               "</div></div>";
-    }
+    private static string Wrap(ShopOptions shop, string title, string body) =>
+        EmailLayout.Wrap(shop, title, body, shop.PublicBaseUrl.TrimEnd('/') + "/mi-cuenta", "Ver mis citas",
+            "Recibes este correo porque tienes una cuenta en la web del taller. Si no esperabas este mensaje, puedes ignorarlo.");
 
     private static string IcsEscape(string s) => s.Replace("\\", "\\\\").Replace(";", "\\;").Replace(",", "\\,").Replace("\n", "\\n");
 

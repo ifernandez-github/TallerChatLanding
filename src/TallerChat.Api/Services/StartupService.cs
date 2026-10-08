@@ -24,6 +24,7 @@ public sealed class StartupService(Db db, IOptions<SeedOptions> seedOptions, Boo
                 ex.GetType().Name);
         }
 
+        await GrandfatherExistingUsersAsync(ct);
         var seed = seedOptions.Value;
 
         if (Validation.TryEmail(seed.AdminEmail, out var adminEmail) && Validation.StrongPassword(seed.AdminPassword))
@@ -33,7 +34,9 @@ public sealed class StartupService(Db db, IOptions<SeedOptions> seedOptions, Boo
                 await db.Users.InsertOneAsync(new AppUser
                 {
                     Email = adminEmail, Name = seed.AdminName, Role = Roles.Admin,
-                    PasswordHash = PasswordHasher.Hash(seed.AdminPassword)
+                    PasswordHash = PasswordHasher.Hash(seed.AdminPassword),
+                    EmailVerified = true, // el administrador no pasa por el correo de confirmación
+                    SecurityStamp = Guid.NewGuid().ToString("N")
                 }, cancellationToken: ct);
                 log.LogInformation("Usuario administrador creado.");
             }
@@ -55,6 +58,19 @@ public sealed class StartupService(Db db, IOptions<SeedOptions> seedOptions, Boo
     }
 
     public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
+
+    /// <summary>
+    /// Las cuentas creadas antes de que existiera la confirmación por correo no tienen el campo
+    /// <c>email_verified</c>. Se dan por verificadas para que sus dueños no se queden fuera.
+    /// </summary>
+    private async Task GrandfatherExistingUsersAsync(CancellationToken ct)
+    {
+        var result = await db.Users.UpdateManyAsync(
+            Builders<AppUser>.Filter.Exists("email_verified", false),
+            Builders<AppUser>.Update.Set(u => u.EmailVerified, true), cancellationToken: ct);
+        if (result.ModifiedCount > 0)
+            log.LogInformation("{Count} cuentas anteriores se han marcado como verificadas.", result.ModifiedCount);
+    }
 
     private sealed record DemoPerson(string Name, string Email, string Phone, Address Address, Vehicle[] Vehicles);
 
@@ -83,7 +99,8 @@ public sealed class StartupService(Db db, IOptions<SeedOptions> seedOptions, Boo
         var users = people.Select(p => new AppUser
         {
             Name = p.Name, Email = p.Email, Phone = p.Phone, Address = p.Address,
-            Vehicles = p.Vehicles.ToList(), PasswordHash = hash
+            Vehicles = p.Vehicles.ToList(), PasswordHash = hash,
+            EmailVerified = true, SecurityStamp = Guid.NewGuid().ToString("N")
         }).ToList();
         await db.Users.InsertManyAsync(users, cancellationToken: ct);
 

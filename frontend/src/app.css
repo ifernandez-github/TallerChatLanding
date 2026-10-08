@@ -229,7 +229,7 @@ fieldset.step legend + * { clear: both; }
 /* ---------- Diálogo ---------- */
 dialog.sheet.wide { width: min(620px, calc(100vw - 32px)); }
 .sheet-scroll { max-height: min(74vh, 640px); overflow-y: auto; }
-.sheet-scroll > div:last-child { padding: 0 20px 20px; }
+.sheet-scroll > div:last-child:not(.danger-actions) { padding: 0 20px 20px; }
 .sheet-scroll .block-head { margin-top: 0; }
 
 /* ---------- Administración ---------- */
@@ -297,3 +297,38 @@ tr.off td { opacity: .55; }
 }
 
 .book-band { padding: 0 0 clamp(48px, 7vw, 80px); background: var(--surface); }
+
+/* ---------- Estados de la pantalla de acceso (confirmar cuenta, contraseña olvidada) ---------- */
+.auth-state { display: flex; flex-direction: column; align-items: center; gap: 12px; text-align: center; padding: 6px 0 2px; }
+.auth-state h2 { margin: 0; font-size: 1.4rem; letter-spacing: -.03em; }
+.auth-state p { margin: 0; color: var(--muted); max-width: 42ch; }
+.auth-state strong { color: var(--ink); overflow-wrap: anywhere; }
+.auth-state .row-gap { justify-content: center; }
+.auth-state .ok-note { width: 100%; }
+.state-ico { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: var(--brand-soft); color: var(--brand); }
+.state-ico.bad { background: color-mix(in srgb, var(--err) 12%, transparent); color: var(--err); }
+.auth-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; }
+.auth-foot .link { align-self: center; }
+
+/* ---------- Zona de riesgo: borrar la cuenta ---------- */
+.danger-zone { margin-top: 18px; padding: 20px 22px; background: color-mix(in srgb, var(--err) 5%, var(--surface)); border: 1px solid color-mix(in srgb, var(--err) 35%, var(--line)); border-radius: var(--radius); }
+.danger-zone h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; font-size: 1.05rem; letter-spacing: -.015em; color: var(--err); }
+.danger-zone p { margin: 0 0 14px; color: var(--muted); font-size: .92rem; line-height: 1.55; }
+.danger-btn { background: var(--err); border-color: var(--err); color: #fff; }
+.danger-btn:disabled { opacity: .5; cursor: not-allowed; }
+@media (hover: hover) and (pointer: fine) { .danger-btn:not(:disabled):hover { background: color-mix(in srgb, var(--err) 85%, #000); } }
+
+.danger-sheet .sheet-head h2 { display: flex; align-items: center; gap: 8px; color: var(--err); }
+.danger-intro { margin: 0 0 12px; line-height: 1.55; }
+.danger-list { display: grid; gap: 6px; margin: 0 0 14px; padding: 12px 14px; list-style: none; background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; }
+.danger-list li { display: flex; align-items: center; gap: 8px; font-size: .9rem; }
+.danger-list svg { flex: none; color: var(--err); }
+.danger-warn { margin: 0 0 14px; font-weight: 650; color: var(--err); font-size: .9rem; }
+.danger-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+.danger-actions .btn-outline { flex: none; }
+.danger-actions .danger-btn { flex: 1 1 200px; }
+
+/* ---------- Cita señalada desde un enlace de correo ---------- */
+.appt.highlight { border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent); animation: appt-pulse 1.6s ease-out 2; }
+@keyframes appt-pulse { 0% { background: color-mix(in srgb, var(--brand) 14%, var(--surface)); } 100% { background: var(--surface); } }
+@media (prefers-reduced-motion: reduce) { .appt.highlight { animation: none; background: color-mix(in srgb, var(--brand) 10%, var(--surface)); } }

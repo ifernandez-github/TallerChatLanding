@@ -38,13 +38,23 @@ export interface AdminAppointment {
 }
 export interface AdminUser {
   id: string; name: string; email: string; phone?: string | null; role: 'client' | 'admin'
-  active: boolean; createdAt: string; appointments: number; address?: Address | null; vehicles: Vehicle[]
+  active: boolean; emailVerified: boolean; createdAt: string; appointments: number
+  address?: Address | null; vehicles: Vehicle[]
 }
 export interface AdminUserInput { name: string; email: string; phone: string; address: Address; role?: 'client' | 'admin' }
 export interface Summary { pending: number; today: number; users: number }
 
+/** Lo que desaparece al borrar una cuenta. Se consulta antes de confirmar, para poder avisar con números reales. */
+export interface DeletionSummary { vehicles: number; appointments: number; upcoming: number }
+
+/** Códigos que devuelve el backend para los casos que necesitan una acción concreta en la web. */
+export const ERR_NOT_VERIFIED = 'email_not_verified'
+export const ERR_BAD_TOKEN = 'invalid_token'
+
+export interface RegisterResult { registered: boolean; emailSent: boolean; signedIn: boolean; email: string }
+
 export class ApiError extends Error {
-  constructor(public status: number, message: string) { super(message) }
+  constructor(public status: number, message: string, public code: string | null = null) { super(message) }
 }
 
 export const errMsg = (e: unknown) => (e instanceof Error ? e.message : 'Algo salió mal. Inténtalo de nuevo.')
@@ -63,7 +73,7 @@ async function call<T>(method: string, url: string, body?: unknown): Promise<T> 
       : res.status === 403 ? 'No tienes permiso para hacer esto.'
       : res.status === 429 ? 'Demasiadas solicitudes. Inténtalo de nuevo más tarde.'
       : 'No se pudo completar la operación. Inténtalo de nuevo.'
-    throw new ApiError(res.status, data?.error ?? fallback)
+    throw new ApiError(res.status, data?.error ?? fallback, data?.code ?? null)
   }
   return res.status === 204 ? (undefined as T) : res.json()
 }
@@ -77,15 +87,25 @@ export const api = {
     }
   },
   login: (email: string, password: string) => call<User>('POST', '/api/auth/login', { email, password }),
-  register: (name: string, email: string, phone: string, password: string) =>
-    call<User>('POST', '/api/auth/register', { name, email, phone, password }),
+  register: (name: string, email: string, emailConfirm: string, phone: string, password: string) =>
+    call<RegisterResult>('POST', '/api/auth/register', { name, email, emailConfirm, phone, password }),
   logout: () => call<void>('POST', '/api/auth/logout'),
+
+  // Confirmación de la cuenta y contraseña olvidada
+  verifyEmail: (token: string) => call<{ verified: boolean; email: string }>('POST', '/api/auth/verify', { token }),
+  resendVerification: (email: string) => call<{ sent: boolean }>('POST', '/api/auth/resend', { email }),
+  forgotPassword: (email: string) => call<{ sent: boolean }>('POST', '/api/auth/forgot', { email }),
+  resetPassword: (token: string, password: string) => call<{ reset: boolean }>('POST', '/api/auth/reset', { token, password }),
 
   // Ficha del cliente: datos y vehículos
   updateProfile: (input: ProfileInput) => call<User>('PUT', '/api/profile', input),
   addVehicle: (v: VehicleInput) => call<User>('POST', '/api/profile/vehicles', v),
   updateVehicle: (id: string, v: VehicleInput) => call<User>('PUT', `/api/profile/vehicles/${id}`, v),
   deleteVehicle: (id: string) => call<User>('DELETE', `/api/profile/vehicles/${id}`),
+
+  // Baja de la propia cuenta
+  deletionPreview: () => call<DeletionSummary>('GET', '/api/profile/deletion'),
+  deleteAccount: (password: string) => call<DeletionSummary>('POST', '/api/profile/delete', { password }),
 
   // Citas del cliente
   availability: (date: string) => call<Availability>('GET', `/api/appointments/availability?date=${encodeURIComponent(date)}`),
@@ -104,6 +124,9 @@ export const api = {
   adminUsers: () => call<AdminUser[]>('GET', '/api/admin/users'),
   adminUpdateUser: (id: string, input: AdminUserInput) => call<User>('PUT', `/api/admin/users/${id}`, input),
   adminSetActive: (id: string, active: boolean) => call<{ id: string; active: boolean }>('POST', `/api/admin/users/${id}/active`, { active }),
+  adminDeletionPreview: (id: string) => call<DeletionSummary>('GET', `/api/admin/users/${id}/deletion`),
+  adminDeleteUser: (id: string, confirmEmail: string) =>
+    call<DeletionSummary>('POST', `/api/admin/users/${id}/delete`, { confirmEmail }),
   adminAddVehicle: (userId: string, v: VehicleInput) => call<User>('POST', `/api/admin/users/${userId}/vehicles`, v),
   adminUpdateVehicle: (userId: string, id: string, v: VehicleInput) => call<User>('PUT', `/api/admin/users/${userId}/vehicles/${id}`, v),
   adminDeleteVehicle: (userId: string, id: string) => call<User>('DELETE', `/api/admin/users/${userId}/vehicles/${id}`)

@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import { api, type User } from '../appApi'
+import { api, type RegisterResult, type User } from '../appApi'
 
 // Estado compartido de la sesión.
 const user = ref<User | null>(null)
@@ -17,8 +17,14 @@ export function useAuth() {
   }
 
   async function login(email: string, password: string) { user.value = await api.login(email, password) }
-  async function register(name: string, email: string, phone: string, password: string) {
-    user.value = await api.register(name, email, phone, password)
+  /**
+   * Da de alta la cuenta. Normalmente NO inicia sesión: hay que confirmar el correo primero.
+   * Solo entra directamente cuando el servidor no tiene configurado el envío de emails.
+   */
+  async function register(name: string, email: string, emailConfirm: string, phone: string, password: string): Promise<RegisterResult> {
+    const result = await api.register(name, email, emailConfirm, phone, password)
+    if (result.signedIn) user.value = await api.me()
+    return result
   }
 
   /**

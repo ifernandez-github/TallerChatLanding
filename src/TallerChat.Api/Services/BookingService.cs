@@ -74,6 +74,9 @@ public sealed class BookingService(Db db, IOptions<BookingOptions> options)
         return slots[Math.Min(index, slots.Count - 1)];
     }
 
+    /// <summary>Día local del taller (AAAA-MM-DD) para un instante UTC. Sirve para enlazar a la agenda de administración.</summary>
+    public string LocalDateIso(DateTime utc) => Iso(DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(AsUtc(utc), tz)));
+
     public string Describe(DateTime utc)
     {
         var l = TimeZoneInfo.ConvertTimeFromUtc(AsUtc(utc), tz);

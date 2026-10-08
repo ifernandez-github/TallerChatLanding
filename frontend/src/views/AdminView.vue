@@ -1,14 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import {
-  api, errMsg, type AdminAppointment, type AdminUser, type CalendarDay, type Status, type Summary, type VehicleInput
+  api, errMsg, type AdminAppointment, type AdminUser, type CalendarDay, type DeletionSummary, type Status,
+  type Summary, type VehicleInput
 } from '../appApi'
+import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
 import VehicleManager from '../components/VehicleManager.vue'
 import { useAuth } from '../composables/useAuth'
 import { addMonths, dayNumber, fmtDate, fmtTime, monthLabel, monthOf, statusLabels, todayIso, weekdayMon } from '../format'
 
 const { user } = useAuth()
+const route = useRoute()
 
 const tab = ref<'agenda' | 'users'>('agenda')
 const month = ref(monthOf(todayIso()))
@@ -23,6 +27,8 @@ const loading = ref(false)
 const error = ref('')
 const notice = ref('')
 const acting = ref('')
+/** Cita a la que apunta un enlace recibido por correo (?fecha=&cita=): se resalta al llegar a su agenda. */
+const highlightId = ref('')
 
 const dow = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom']
 const statusText: Record<string, string> = { free: 'Libre', partial: 'Parcial', full: 'Completo', closed: 'Cerrado' }
@@ -72,6 +78,7 @@ async function loadUsers() {
 function pickDay(day: CalendarDay) {
   if (day.closed) return
   onlyPending.value = false
+  highlightId.value = ''
   date.value = day.date
 }
 
@@ -112,6 +119,68 @@ async function toggleActive(u: AdminUser) {
     error.value = errMsg(e)
   } finally {
     acting.value = ''
+  }
+}
+
+// ---- Baja de una cuenta ----
+const delUser = ref<AdminUser | null>(null)
+const delOpening = ref('')
+const delBusy = ref(false)
+const delError = ref('')
+/** Se cuenta en el momento de abrir el aviso: la tabla puede llevar rato cargada. */
+const delPreview = ref<DeletionSummary | null>(null)
+
+/** Lo que desaparece con la cuenta, con el número de citas que todavía no han pasado bien visible. */
+const delItems = computed(() => {
+  const p = delPreview.value
+  if (!p) return []
+  const list: string[] = []
+  list.push(p.vehicles
+    ? (p.vehicles === 1 ? '1 vehículo de su ficha' : `${p.vehicles} vehículos de su ficha`)
+    : 'Su ficha (no tiene vehículos guardados)')
+  if (p.appointments) {
+    const citas = p.appointments === 1 ? '1 cita' : `${p.appointments} citas`
+    list.push(p.upcoming
+      ? `${citas}, de las que ${p.upcoming} todavía no ha${p.upcoming === 1 ? '' : 'n'} pasado`
+      : `${citas} y su historial`)
+  }
+  list.push('Sus datos de contacto y su dirección')
+  return list
+})
+
+async function askDelete(u: AdminUser) {
+  if (delOpening.value) return
+  delOpening.value = u.id
+  delError.value = ''
+  error.value = ''
+  notice.value = ''
+  delPreview.value = null
+  try {
+    delPreview.value = await api.adminDeletionPreview(u.id)
+    delUser.value = u
+  } catch (e) {
+    error.value = errMsg(e)
+  } finally {
+    delOpening.value = ''
+  }
+}
+
+async function confirmDelete(confirmEmail: string) {
+  const target = delUser.value
+  if (!target) return
+  delBusy.value = true
+  delError.value = ''
+  try {
+    await api.adminDeleteUser(target.id, confirmEmail)
+    users.value = users.value.filter((u) => u.id !== target.id)
+    delUser.value = null
+    notice.value = `La cuenta de ${target.name} se ha eliminado con todos sus datos.`
+    // Las citas de esa persona ya no están: la ocupación y el resumen cambian.
+    await Promise.all([loadSummary(), loadCalendar()])
+  } catch (e) {
+    delError.value = errMsg(e)
+  } finally {
+    delBusy.value = false
   }
 }
 
@@ -172,7 +241,25 @@ const removeVehicle = async (id: string) => syncUser(await api.adminDeleteVehicl
 watch(month, loadCalendar)
 watch([date, onlyPending], loadAgenda)
 watch(tab, (t) => { notice.value = ''; if (t === 'users') loadUsers(); else { loadAgenda(); loadCalendar() } })
-onMounted(() => { loadAgenda(); loadCalendar(); loadSummary() })
+
+onMounted(async () => {
+  // Enlace de un correo de aviso: abre directamente el día de esa cita y la resalta al llegar.
+  // La fecha llega de una URL, no del backend: antes de usarla se comprueba el formato.
+  const qDate = route.query.fecha
+  const qAppt = route.query.cita
+  if (typeof qDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(qDate)) {
+    date.value = qDate
+    month.value = monthOf(qDate)
+  }
+  if (typeof qAppt === 'string' && qAppt) highlightId.value = qAppt
+
+  await Promise.all([loadAgenda(), loadCalendar(), loadSummary()])
+
+  if (highlightId.value) {
+    await nextTick()
+    document.getElementById(`appt-${highlightId.value}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+})
 </script>
 
 <template>
@@ -254,7 +341,8 @@ onMounted(() => { loadAgenda(); loadCalendar(); loadSummary() })
           <p>{{ onlyPending ? 'No hay solicitudes pendientes.' : 'No hay citas ese día.' }}</p>
         </div>
         <ul v-else class="appt-list">
-          <li v-for="a in items" :key="a.id" class="appt card admin-appt">
+          <li v-for="a in items" :id="`appt-${a.id}`" :key="a.id" class="appt card admin-appt"
+            :class="{ highlight: a.id === highlightId }">
             <div class="appt-date">
               <strong>{{ onlyPending ? fmtDate(a.start) : `${fmtTime(a.start)} h` }}</strong>
               <span>{{ onlyPending ? `${fmtTime(a.start)} h` : `Elevador ${a.bay}` }}</span>
@@ -299,15 +387,27 @@ onMounted(() => { loadAgenda(); loadCalendar(); loadSummary() })
                 <td data-label="Vehículos" class="num-col">{{ u.vehicles.length }}</td>
                 <td data-label="Citas" class="num-col">{{ u.appointments }}</td>
                 <td data-label="Rol">
-                  <span :class="['pill', u.role === 'admin' ? 'confirmed' : 'completed']">{{ u.role === 'admin' ? 'Administrador' : 'Cliente' }}</span>
+                  <div class="act-row">
+                    <span :class="['pill', u.role === 'admin' ? 'confirmed' : 'completed']">{{ u.role === 'admin' ? 'Administrador' : 'Cliente' }}</span>
+                    <span v-if="!u.emailVerified" class="pill pending" title="Todavía no ha pulsado el enlace de confirmación">Sin confirmar</span>
+                  </div>
                 </td>
                 <td data-label="Acciones">
                   <div class="act-row">
-                    <button type="button" class="mini" @click="openUser(u)"><Icon name="edit" :size="14" />Ficha</button>
-                    <button v-if="u.id !== user?.id" type="button" class="mini" :class="{ danger: u.active }"
-                      :disabled="acting === u.id" @click="toggleActive(u)">
-                      {{ u.active ? 'Desactivar' : 'Reactivar' }}
+                    <button type="button" class="mini" :aria-label="`Abrir la ficha de ${u.name}`" @click="openUser(u)">
+                      <Icon name="edit" :size="14" />Ficha
                     </button>
+                    <template v-if="u.id !== user?.id">
+                      <button type="button" class="mini" :class="{ danger: u.active }" :disabled="acting === u.id"
+                        :aria-label="`${u.active ? 'Desactivar' : 'Reactivar'} la cuenta de ${u.name}`"
+                        @click="toggleActive(u)">
+                        {{ u.active ? 'Desactivar' : 'Reactivar' }}
+                      </button>
+                      <button type="button" class="mini danger" :disabled="delOpening === u.id"
+                        :aria-label="`Eliminar la cuenta de ${u.name}`" @click="askDelete(u)">
+                        <Icon name="trash" :size="14" />Eliminar
+                      </button>
+                    </template>
                     <span v-else class="muted">Tú</span>
                   </div>
                 </td>
@@ -366,6 +466,15 @@ onMounted(() => { loadAgenda(); loadCalendar(); loadSummary() })
             :add="addVehicle" :update="updateVehicle" :remove="removeVehicle" />
         </div>
       </dialog>
+
+      <!-- Baja de una cuenta de cliente -->
+      <ConfirmDialog :open="!!delUser" :title="`Eliminar la cuenta de ${delUser?.name ?? ''}`"
+        :intro="`Se borrará definitivamente la cuenta de ${delUser?.email ?? ''} y todo lo que cuelga de ella:`"
+        :items="delItems" require-label="Escribe el correo de la cuenta para confirmar"
+        :expected="delUser?.email"
+        require-hint="Lo pedimos para que un clic en la fila equivocada no borre a quien no toca."
+        confirm-label="Eliminar la cuenta" :busy="delBusy" :error="delError"
+        @confirm="confirmDelete" @close="delUser = null" />
     </div>
   </section>
 </template>

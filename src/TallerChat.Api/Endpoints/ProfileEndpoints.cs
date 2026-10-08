@@ -1,4 +1,6 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using MongoDB.Driver;
 
 namespace TallerChat.Api;
@@ -15,6 +17,9 @@ public static class ProfileEndpoints
         g.MapPost("/vehicles", AddVehicleAsync);
         g.MapPut("/vehicles/{vehicleId}", UpdateVehicleAsync);
         g.MapDelete("/vehicles/{vehicleId}", DeleteVehicleAsync);
+        g.MapGet("/deletion", DeletionPreviewAsync).RequireRateLimiting("account");
+        // POST y no DELETE: lleva la contraseña en el cuerpo, y hay proxies que descartan el cuerpo de un DELETE.
+        g.MapPost("/delete", DeleteAccountAsync).RequireRateLimiting("account");
     }
 
     private static async Task<IResult> UpdateAsync(ProfileRequest req, ClaimsPrincipal principal, Db db, CancellationToken ct)
@@ -28,6 +33,42 @@ public static class ProfileEndpoints
 
     private static async Task<IResult> DeleteVehicleAsync(string vehicleId, ClaimsPrincipal principal, Db db, CancellationToken ct)
         => await UserAdmin.DeleteVehicleAsync(db, principal.UserId(), vehicleId, ct);
+
+    /// <summary>Lo que se perdería al borrar la cuenta. La web lo enseña en el aviso antes de pedir confirmación.</summary>
+    private static async Task<IResult> DeletionPreviewAsync(ClaimsPrincipal principal, Db db, AccountDeletion deletion,
+        CancellationToken ct)
+    {
+        var id = principal.UserId();
+        var user = await db.Users.Find(u => u.Id == id).FirstOrDefaultAsync(ct);
+        return user is null ? ApiResults.Error(404, "Usuario no encontrado.") : Results.Ok(await deletion.PreviewAsync(user, ct));
+    }
+
+    /// <summary>
+    /// Baja definitiva de la propia cuenta. Se pide la contraseña a propósito: con solo la cookie de sesión
+    /// (un ordenador prestado, una pestaña abierta) no se puede borrar nada.
+    /// </summary>
+    private static async Task<IResult> DeleteAccountAsync(DeleteAccountRequest req, ClaimsPrincipal principal, Db db,
+        AccountDeletion deletion, Notifier notifier, HttpContext http, CancellationToken ct)
+    {
+        var id = principal.UserId();
+        var user = await db.Users.Find(u => u.Id == id).FirstOrDefaultAsync(ct);
+        if (user is null) return ApiResults.Error(404, "Usuario no encontrado.");
+
+        if (string.IsNullOrEmpty(req.Password) || req.Password.Length > 100 ||
+            !PasswordHasher.Verify(req.Password, user.PasswordHash))
+            return ApiResults.Error(403, "La contraseña no es correcta.");
+
+        var result = await deletion.DeleteAsync(user, id, ct);
+        if (result.Outcome == DeletionOutcome.LastAdmin)
+            return ApiResults.Error(409, "Eres la única cuenta de administración con la que se puede entrar. Nombra a otro administrador antes de darte de baja.");
+
+        await http.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+        // Solo se despide a quien se acaba de borrar: si la cuenta ya no estaba, el aviso saldría dos veces.
+        // CancellationToken.None: el correo sale aunque se cierre la pestaña.
+        if (result.Outcome == DeletionOutcome.Deleted)
+            await notifier.TrySendDeletedAsync(user, result.Summary, false, CancellationToken.None);
+        return Results.Ok(result.Summary);
+    }
 }
 
 /// <summary>

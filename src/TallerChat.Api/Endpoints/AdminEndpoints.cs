@@ -25,6 +25,9 @@ public static class AdminEndpoints
         g.MapGet("/users", UsersAsync);
         g.MapPut("/users/{id}", UpdateUserAsync);
         g.MapPost("/users/{id}/active", SetActiveAsync);
+        g.MapGet("/users/{id}/deletion", DeletionPreviewAsync).RequireRateLimiting("account");
+        // POST y no DELETE: el correo de confirmación viaja en el cuerpo, nunca en la URL.
+        g.MapPost("/users/{id}/delete", DeleteUserAsync).RequireRateLimiting("account");
         g.MapPost("/users/{id}/vehicles", AddVehicleAsync);
         g.MapPut("/users/{id}/vehicles/{vehicleId}", UpdateVehicleAsync);
         g.MapDelete("/users/{id}/vehicles/{vehicleId}", DeleteVehicleAsync);
@@ -122,12 +125,16 @@ public static class AdminEndpoints
 
     /// <summary>Edita cualquier dato de la ficha de un cliente. Un administrador no puede quitarse a sí mismo el rol.</summary>
     private static async Task<IResult> UpdateUserAsync(string id, AdminUserRequest req, ClaimsPrincipal principal, Db db,
-        IMemoryCache cache, CancellationToken ct)
+        AccountDeletion deletion, IMemoryCache cache, CancellationToken ct)
     {
         if (!ObjectId.TryParse(id, out _)) return ApiResults.Error(404, "Usuario no encontrado.");
         var role = req.Role;
         if (id == principal.UserId() && role is not null && role != Roles.Admin)
             return ApiResults.Error(400, "No puedes quitarte a ti mismo el rol de administrador.");
+
+        // Degradar al último administrador utilizable dejaría el taller sin nadie que pueda entrar aquí.
+        if (role is not null && role != Roles.Admin && await IsLastUsableAdminAsync(id, db, deletion, ct))
+            return ApiResults.Error(409, "Es la única cuenta de administración con la que se puede entrar. Nombra a otro administrador antes de cambiarle el rol.");
 
         var result = await UserAdmin.UpdateProfileAsync(db, id, req.Name, req.Email, req.Phone, req.Address, role, ct);
         cache.Remove(AuthSetup.CacheKey(id)); // si ha cambiado el rol, la sesión debe revalidarse enseguida
@@ -143,12 +150,61 @@ public static class AdminEndpoints
     private static Task<IResult> DeleteVehicleAsync(string id, string vehicleId, Db db, CancellationToken ct)
         => UserAdmin.DeleteVehicleAsync(db, id, vehicleId, ct);
 
+    /// <summary>
+    /// ¿Esa cuenta es el último administrador con el que se puede entrar? Se usa antes de borrarla,
+    /// degradarla o desactivarla: las tres cosas dejarían la administración inaccesible.
+    /// </summary>
+    private static async Task<bool> IsLastUsableAdminAsync(string id, Db db, AccountDeletion deletion, CancellationToken ct)
+    {
+        var target = await db.Users.Find(u => u.Id == id).FirstOrDefaultAsync(ct);
+        return target?.Role == Roles.Admin && await deletion.IsLastAdminAsync(id, ct);
+    }
+
+    /// <summary>Lo que se perderá con esa cuenta, contado en el momento de abrir el aviso de confirmación.</summary>
+    private static async Task<IResult> DeletionPreviewAsync(string id, Db db, AccountDeletion deletion, CancellationToken ct)
+    {
+        if (!ObjectId.TryParse(id, out _)) return ApiResults.Error(404, "Usuario no encontrado.");
+        var user = await db.Users.Find(u => u.Id == id).FirstOrDefaultAsync(ct);
+        return user is null ? ApiResults.Error(404, "Usuario no encontrado.") : Results.Ok(await deletion.PreviewAsync(user, ct));
+    }
+
+    /// <summary>
+    /// Borra una cuenta con todo lo suyo: vehículos, citas y enlaces de correo pendientes.
+    /// Para evitar un clic en la fila equivocada, hay que teclear el correo exacto de esa cuenta.
+    /// </summary>
+    private static async Task<IResult> DeleteUserAsync(string id, AdminDeleteUserRequest req, ClaimsPrincipal principal,
+        Db db, AccountDeletion deletion, Notifier notifier, CancellationToken ct)
+    {
+        if (!ObjectId.TryParse(id, out _)) return ApiResults.Error(404, "Usuario no encontrado.");
+        if (id == principal.UserId())
+            return ApiResults.Error(400, "No puedes borrar tu propia cuenta desde aquí. Hazlo desde tu área de cliente.");
+
+        var user = await db.Users.Find(u => u.Id == id).FirstOrDefaultAsync(ct);
+        if (user is null) return ApiResults.Error(404, "Usuario no encontrado.");
+
+        if (!Validation.TryEmail(req.ConfirmEmail, out var confirm) || confirm != user.Email)
+            return ApiResults.Error(400, "Escribe el correo exacto de la cuenta para confirmar el borrado.");
+
+        var result = await deletion.DeleteAsync(user, principal.UserId(), ct);
+        if (result.Outcome == DeletionOutcome.LastAdmin)
+            return ApiResults.Error(409, "Es la única cuenta de administración con la que se puede entrar. Nombra a otro administrador antes de borrarla.");
+
+        // El cliente se entera de que su cuenta ya no está, aunque la baja no la haya pedido él.
+        if (result.Outcome == DeletionOutcome.Deleted)
+            await notifier.TrySendDeletedAsync(user, result.Summary, true, CancellationToken.None);
+        return Results.Ok(result.Summary);
+    }
+
     private static async Task<IResult> SetActiveAsync(string id, ActiveRequest req, ClaimsPrincipal principal, Db db,
-        IMemoryCache cache, CancellationToken ct)
+        AccountDeletion deletion, IMemoryCache cache, CancellationToken ct)
     {
         if (!ObjectId.TryParse(id, out _)) return ApiResults.Error(404, "Usuario no encontrado.");
         if (req.Active is not { } active) return ApiResults.Error(400, "Indica si la cuenta debe estar activa.");
         if (id == principal.UserId()) return ApiResults.Error(400, "No puedes desactivar tu propia cuenta.");
+
+        // Una cuenta desactivada no puede iniciar sesión: desactivar al último administrador equivale a perderlo.
+        if (!active && await IsLastUsableAdminAsync(id, db, deletion, ct))
+            return ApiResults.Error(409, "Es la única cuenta de administración con la que se puede entrar. Nombra a otro administrador antes de desactivarla.");
 
         var result = await db.Users.UpdateOneAsync(u => u.Id == id, Builders<AppUser>.Update.Set(u => u.Active, active), cancellationToken: ct);
         if (result.MatchedCount == 0) return ApiResults.Error(404, "Usuario no encontrado.");

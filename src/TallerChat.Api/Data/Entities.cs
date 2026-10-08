@@ -20,6 +20,11 @@ public static class Statuses
     public static readonly string[] Booked = [Pending, Confirmed, Completed];
 }
 
+public static class TokenKinds
+{
+    public const string Verify = "verify", Reset = "reset";
+}
+
 public static class Fuels
 {
     public const string Petrol = "gasolina", Diesel = "diesel", Hybrid = "hibrido",
@@ -68,8 +73,31 @@ public sealed class AppUser
     [BsonElement("address")] public Address? Address { get; set; }
     [BsonElement("vehicles")] public List<Vehicle> Vehicles { get; set; } = [];
     [BsonElement("password_hash")] public string PasswordHash { get; set; } = "";
+    /// <summary>Hasta que no confirma su correo, la cuenta no puede iniciar sesión.</summary>
+    [BsonElement("email_verified")] public bool EmailVerified { get; set; }
+    /// <summary>
+    /// Cambia al restablecer la contraseña y se guarda también en la cookie: así las sesiones abiertas
+    /// en otros dispositivos dejan de valer. Vacío en las cuentas anteriores a esta función.
+    /// </summary>
+    [BsonElement("security_stamp")] public string SecurityStamp { get; set; } = "";
     [BsonElement("role")] public string Role { get; set; } = Roles.Client;
     [BsonElement("active")] public bool Active { get; set; } = true;
+    [BsonElement("created_at"), BsonDateTimeOptions(Kind = DateTimeKind.Utc)] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+}
+
+/// <summary>
+/// Documento de taller_db.auth_tokens: un enlace de un solo uso enviado por correo (verificar la cuenta o
+/// restablecer la contraseña). Del token solo se guarda su hash, nunca el valor que viaja en el email.
+/// </summary>
+[BsonIgnoreExtraElements]
+public sealed class AuthToken
+{
+    [BsonId, BsonRepresentation(BsonType.ObjectId)] public string Id { get; set; } = ObjectId.GenerateNewId().ToString();
+    [BsonElement("user_id"), BsonRepresentation(BsonType.ObjectId)] public string UserId { get; set; } = "";
+    [BsonElement("kind")] public string Kind { get; set; } = "";
+    [BsonElement("hash")] public string Hash { get; set; } = "";
+    [BsonElement("expires_at"), BsonDateTimeOptions(Kind = DateTimeKind.Utc)] public DateTime ExpiresAt { get; set; }
+    [BsonElement("used_at"), BsonDateTimeOptions(Kind = DateTimeKind.Utc)] public DateTime? UsedAt { get; set; }
     [BsonElement("created_at"), BsonDateTimeOptions(Kind = DateTimeKind.Utc)] public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 }
 

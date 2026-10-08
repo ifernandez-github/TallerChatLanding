@@ -8,6 +8,7 @@ public sealed class Db(IMongoDatabase database)
 {
     public IMongoCollection<AppUser> Users { get; } = database.GetCollection<AppUser>("users");
     public IMongoCollection<Appointment> Appointments { get; } = database.GetCollection<Appointment>("appointments");
+    public IMongoCollection<AuthToken> Tokens { get; } = database.GetCollection<AuthToken>("auth_tokens");
 
     public async Task EnsureIndexesAsync(CancellationToken ct)
     {
@@ -31,5 +32,19 @@ public sealed class Db(IMongoDatabase database)
         await Appointments.Indexes.CreateOneAsync(new CreateIndexModel<Appointment>(
             Builders<Appointment>.IndexKeys.Ascending(a => a.UserId).Descending(a => a.Start),
             new CreateIndexOptions<Appointment> { Name = "appointments_user_start" }), cancellationToken: ct);
+
+        // El hash identifica el token: debe ser único y la búsqueda por él, inmediata.
+        await Tokens.Indexes.CreateOneAsync(new CreateIndexModel<AuthToken>(
+            Builders<AuthToken>.IndexKeys.Ascending(t => t.Hash),
+            new CreateIndexOptions<AuthToken> { Unique = true, Name = "tokens_hash_unique" }), cancellationToken: ct);
+
+        // MongoDB borra solo los tokens caducados (no hay que limpiarlos desde la aplicación).
+        await Tokens.Indexes.CreateOneAsync(new CreateIndexModel<AuthToken>(
+            Builders<AuthToken>.IndexKeys.Ascending(t => t.ExpiresAt),
+            new CreateIndexOptions<AuthToken> { Name = "tokens_ttl", ExpireAfter = TimeSpan.Zero }), cancellationToken: ct);
+
+        await Tokens.Indexes.CreateOneAsync(new CreateIndexModel<AuthToken>(
+            Builders<AuthToken>.IndexKeys.Ascending(t => t.UserId).Ascending(t => t.Kind),
+            new CreateIndexOptions<AuthToken> { Name = "tokens_user_kind" }), cancellationToken: ct);
     }
 }

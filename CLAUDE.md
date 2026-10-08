@@ -68,6 +68,14 @@ App web de un taller: landing, chatbot sobre la base de conocimiento, gestión d
 - El chat se abre/cierra con `composables/useChat.ts`; cualquier botón de la web puede llamar a `openChat()`.
 
 ### Citas y usuarios
+- Confirmación de cuenta y contraseña olvidada: los enlaces se emiten y se gastan SIEMPRE por `TokenService`
+  (token aleatorio, solo se guarda el hash, un uso, con caducidad). Nunca guardar el token en claro ni reutilizarlo.
+- `/api/auth/forgot` y `/api/auth/resend` deben responder exactamente igual exista o no la cuenta: no se puede
+  revelar qué correos están registrados. El enfriamiento por destinatario se consume ANTES de consultar la base de
+  datos, para que el tiempo de respuesta tampoco lo delate.
+- Cambiar la contraseña rota `SecurityStamp`, que viaja también en la cookie: así caen las sesiones de otros
+  dispositivos. Tras tocar el estado de un usuario hay que dejar el valor nuevo en `IMemoryCache`
+  (`AuthEndpoints.Refresh`), no solo borrar la entrada.
 - Contraseñas: siempre `PasswordHasher.Hash`/`Verify` (PBKDF2); nunca comparar en texto plano. `Login` verifica
   contra `PasswordHasher.Dummy` cuando el usuario no existe, para no delatar por tiempo de respuesta si el correo
   está registrado.
@@ -86,12 +94,34 @@ App web de un taller: landing, chatbot sobre la base de conocimiento, gestión d
 - Los emails de citas (solicitud, confirmación, cancelación, recordatorio) los genera siempre `AppointmentEmails`
   en el servidor; el cliente nunca envía el asunto ni el cuerpo. Un fallo de SMTP (`Notifier`) nunca debe romper la
   reserva, cancelación o cambio de estado que lo origina.
+- Una solicitud nueva o una cancelación (`AppointmentEndpoints.BookAsync`/`CancelAsync`) también avisan a la
+  administración con `Notifier.NotifyAdminsAsync`, independientemente del correo al cliente y sin que un fallo en
+  uno afecte al otro. Va a todas las cuentas `Role == Admin` activas y con el correo confirmado; antes de enviar,
+  `ResolveAdminAddress` sustituye las que usan `Shop:PlaceholderDomain` (dominio de ejemplo, no un buzón real) por
+  `Smtp:From`, y las direcciones resultantes se deduplican antes de mandar nada.
+- El enlace de esos avisos (`AppointmentEmails.AdminLink`) usa `BookingService.LocalDateIso`, NUNCA la fecha UTC de
+  `Appointment.Start`: el día que abre en `/admin?fecha=…` tiene que ser el mismo día local en el que esa cita
+  aparece en el calendario.
 - "Enviarme mis citas por email" (`/api/appointments/mine/email`) va siempre al correo de la cuenta autenticada;
   nunca a una dirección que envíe el cliente.
 - Cambios de estado de una cita solo a través de las transiciones de `AdminEndpoints.Transitions` (pendiente →
   confirmada/cancelada, confirmada → completada/cancelada).
 - Al desactivar una cuenta (`/api/admin/users/{id}/active`), limpiar su entrada de `IMemoryCache`
   (`AuthSetup.CacheKey`) para que la sesión deje de valer de inmediato.
+- Borrar una cuenta pasa SIEMPRE por `AccountDeletion` (no borrar usuarios suelto desde un endpoint). Orden fijo:
+  citas → tokens → documento del usuario. Sin transacción: si algo falla a mitad, ese orden deja los huecos libres y
+  la cuenta todavía borrable, en vez de citas huérfanas que nadie puede cancelar.
+- Tras borrar hay que dejar un `UserState(false, "", "")` en `IMemoryCache` (no solo quitar la entrada), igual que en
+  `AuthEndpoints.Refresh`: si no, una petición en vuelo puede volver a cachear un estado activo durante un minuto.
+- Las bajas se serializan con un `SemaphoreSlim` dentro de `AccountDeletion`, porque comprobar "¿queda otro
+  administrador?" y borrar tienen que ocurrir juntos.
+- `IsLastAdminAsync` solo cuenta administradores **activos y con el correo confirmado**: los demás no superan el
+  inicio de sesión, así que contarlos dejaría la administración inaccesible. La misma comprobación bloquea degradar
+  y desactivar al último administrador, no solo borrarlo.
+- La baja propia exige la contraseña y la de administración exige teclear el correo exacto de la cuenta: la cookie
+  de sesión por sí sola nunca basta para una acción irreversible.
+- `@demo.taller` está reservado a los datos de ejemplo: `Notifier.Deliverable` lo descarta y el registro lo rechaza
+  (si no, esa cuenta nunca recibiría el enlace de confirmación y quedaría bloqueada).
 - Datos de ejemplo (`Seed:Demo`, ver `StartupService`): usuarios `@demo.taller`; `Notifier` nunca les envía correos
   (devuelve `SendResult.Skipped`, que `ReminderService` distingue de `Failed` para no reintentar en cada pasada).
 - El calendario de administración cuenta `Statuses.Booked` (incluye las completadas) para que un día pasado y lleno
