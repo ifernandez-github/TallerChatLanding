@@ -1,0 +1,14 @@
+**/bin/
+**/obj/
+**/node_modules/
+**/.vs/
+**/*.user
+src/TallerChat.Api/wwwroot/
+.git
+.gitignore
+.gitattributes
+.env
+**/appsettings.*.local.json
+Dockerfile
+.dockerignore
+*.md

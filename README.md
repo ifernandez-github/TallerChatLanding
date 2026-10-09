@@ -216,6 +216,18 @@ los clientes comparten la misma IP a ojos de la API: el límite de 10 peticiones
 aplicaría a todo el sitio a la vez y el login dejaría de funcionar con tráfico normal. Recuerda también poner
 `Shop:PublicBaseUrl` con el dominio real, porque de ahí salen los enlaces de los correos.
 
+### Docker / Render
+El `Dockerfile` de la raíz compila la web y la API en una sola imagen (escucha en `PORT`, que Render inyecta; 8080 si
+no existe) y ya activa `ASPNETCORE_FORWARDEDHEADERS_ENABLED`. En Render: *New → Web Service*, entorno **Docker**, y en
+*Environment* las variables `Mongo__ConnectionString`, `Gemini__ApiKey`, `Shop__PublicBaseUrl` (la URL pública,
+p. ej. `https://tu-app.onrender.com`), `Smtp__User`, `Smtp__Password`, `Smtp__From` y, para el primer arranque,
+`Seed__AdminEmail` y `Seed__AdminPassword`. En MongoDB Atlas permite el acceso desde las IP de Render (o `0.0.0.0/0`).
+Las claves de sesión viven dentro del contenedor: tras cada despliegue los usuarios tienen que volver a iniciar sesión.
+```
+docker build -t tallerchat .
+docker run -p 8080:8080 -e Mongo__ConnectionString=... -e Gemini__ApiKey=... tallerchat
+```
+
 ## 6. Ajustes habituales
 | Qué | Dónde |
 |---|---|
