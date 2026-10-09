@@ -216,6 +216,19 @@ los clientes comparten la misma IP a ojos de la API: el límite de 10 peticiones
 aplicaría a todo el sitio a la vez y el login dejaría de funcionar con tráfico normal. Recuerda también poner
 `Shop:PublicBaseUrl` con el dominio real, porque de ahí salen los enlaces de los correos.
 
+### Correo por la API de Gmail (cuando el hosting bloquea SMTP)
+El plan gratuito de Render bloquea los puertos 25, 465 y 587, así que el SMTP de Gmail da `TimeoutException`. Si
+`Smtp:Gmail:RefreshToken` tiene valor, el correo sale por la API de Gmail (HTTPS, puerto 443) y se ignoran `Smtp:Host`,
+`Port`, `User` y `Password`; `Smtp:From` debe ser la cuenta de Gmail autorizada. Sin ese valor se sigue usando SMTP.
+1. En Google Cloud Console crea un proyecto, activa **Gmail API** y crea unas credenciales **OAuth client ID** de tipo
+   *Web application* con `https://developers.google.com/oauthplayground` como URI de redirección.
+2. En la pantalla de consentimiento pon la app en **Production** (en *Testing* el refresh token caduca a los 7 días).
+3. En [OAuth Playground](https://developers.google.com/oauthplayground), en la rueda de ajustes marca *Use your own OAuth
+   credentials* y pega el client ID y el secret; autoriza el ámbito `https://www.googleapis.com/auth/gmail.send` con la
+   cuenta que enviará y pulsa *Exchange authorization code for tokens*: copia el **refresh token**.
+4. En Render añade `Smtp__Gmail__ClientId`, `Smtp__Gmail__ClientSecret` y `Smtp__Gmail__RefreshToken`, y comprueba que
+   `Smtp__From` es esa misma cuenta.
+
 ### Docker / Render
 El `Dockerfile` de la raíz compila la web y la API en una sola imagen (escucha en `PORT`, que Render inyecta; 8080 si
 no existe) y ya activa `ASPNETCORE_FORWARDEDHEADERS_ENABLED`. En Render: *New → Web Service*, entorno **Docker**, y en

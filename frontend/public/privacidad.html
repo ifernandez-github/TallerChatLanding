@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark">
+<title>Política de privacidad · Taller Torque</title>
+<style>
+  :root { --bg:#f4f7f9; --surface:#fff; --ink:#0d1c25; --muted:#5d7482; --line:#e5ecef; --brand:#0e8f80; --brand-deep:#0a6d61; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0a1116; --surface:#121c23; --ink:#e8f0f3; --muted:#8ea3af; --line:#233440; --brand:#2ec4b0; --brand-deep:#5fd9c8; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:32px 16px 64px; }
+  .brand { display:inline-block; margin-bottom:24px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:var(--ink); text-decoration:none; }
+  .brand span { color:var(--brand); }
+  article { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:28px 24px; }
+  h1 { margin:0 0 4px; font-size:1.75rem; line-height:1.25; }
+  h2 { margin:28px 0 8px; font-size:1.15rem; color:var(--brand-deep); }
+  p, li { color:var(--ink); } .muted { color:var(--muted); font-size:.9rem; }
+  ul { padding-left:22px; } a { color:var(--brand-deep); }
+  footer { margin-top:20px; font-size:.9rem; color:var(--muted); }
+</style>
+</head>
+<body>
+<main>
+<a class="brand" href="/">Taller <span>Torque</span></a>
+<article>
+<h1>Política de privacidad</h1>
+<p class="muted">Última actualización: 9 de octubre de 2026</p>
+
+<p>Esta política explica qué datos personales trata <strong>Taller Torque</strong> (en adelante, «el taller») a través de este sitio web, para qué los usa y qué derechos tienes sobre ellos.</p>
+
+<h2>1. Responsable del tratamiento</h2>
+<p>Taller Torque, Calle del Motor 24, 28045 Madrid, España. Contacto en materia de privacidad: <a href="mailto:isrfernandez.innovation@gmail.com">isrfernandez.innovation@gmail.com</a>.</p>
+
+<h2>2. Qué datos tratamos y para qué</h2>
+<ul>
+  <li><strong>Cuenta de cliente:</strong> nombre, correo electrónico, contraseña, teléfono y dirección. La contraseña se guarda siempre cifrada con un algoritmo de un solo sentido (PBKDF2); nadie del taller puede verla. Finalidad: crear y mantener tu cuenta e identificarte al iniciar sesión.</li>
+  <li><strong>Vehículos:</strong> matrícula y descripción de los vehículos que registras. Finalidad: asociarlos a tus citas.</li>
+  <li><strong>Citas:</strong> servicio solicitado, día y hora, vehículo, notas que escribas y estado de la cita. Finalidad: gestionar tus reservas y comunicarnos contigo sobre ellas.</li>
+  <li><strong>Correos electrónicos:</strong> te enviamos mensajes relacionados con tu cuenta y tus citas (confirmación de cuenta, restablecer la contraseña, solicitud, confirmación, cancelación y recordatorio de cita, baja de cuenta). No enviamos publicidad.</li>
+  <li><strong>Asistente del chat:</strong> las preguntas que escribes en el chat se envían a un modelo de inteligencia artificial (Google Gemini) junto con fragmentos de la base de conocimiento del taller para redactar la respuesta. Las preguntas no se guardan en nuestra base de datos. Si pides recibir una respuesta por correo, la dirección que escribes se usa solo para ese envío y no se guarda.</li>
+  <li><strong>Datos técnicos:</strong> tu dirección IP se usa de forma temporal para limitar el número de peticiones y evitar abusos. No se almacena en la base de datos.</li>
+</ul>
+
+<h2>3. Base jurídica</h2>
+<p>Ejecución del servicio que solicitas (gestión de tu cuenta y de tus citas), tu consentimiento cuando usas el chat o pides un correo, y nuestro interés legítimo en la seguridad del sitio.</p>
+
+<h2>4. Cookies</h2>
+<p>Usamos una única cookie técnica de sesión (<code>taller.auth</code>), necesaria para mantener tu sesión iniciada. Es de tipo HttpOnly, caduca a los 7 días y no se usa para publicidad ni seguimiento. Guardamos además en tu navegador la preferencia de tema claro u oscuro. No usamos cookies de análisis ni de terceros.</p>
+
+<h2>5. Con quién compartimos los datos</h2>
+<p>Solo con proveedores que nos prestan el servicio, que actúan como encargados del tratamiento:</p>
+<ul>
+  <li><strong>Render</strong>: alojamiento de la aplicación.</li>
+  <li><strong>MongoDB Atlas</strong>: base de datos donde se guardan cuentas, vehículos y citas.</li>
+  <li><strong>Google</strong>: modelo Gemini para el asistente del chat y servicio Gmail para enviar los correos.</li>
+</ul>
+<p>No vendemos ni cedemos tus datos a otras empresas. Algunos de estos proveedores pueden tratar datos fuera del Espacio Económico Europeo con las garantías previstas en la normativa.</p>
+
+<h2>6. Uso de la API de Gmail</h2>
+<p>El sitio usa la API de Gmail únicamente para <strong>enviar</strong> desde la cuenta del propio taller los correos descritos en el apartado 2 (permiso <code>gmail.send</code>). No accede a tu bandeja de entrada ni a tu cuenta de Google, no lee, almacena ni comparte contenido de ningún buzón y no usa estos datos para publicidad. El uso que la aplicación hace de la información recibida de las API de Google se ajusta a la <a href="https://developers.google.com/terms/api-services-user-data-policy">Política de datos de usuario de los servicios de las API de Google</a>, incluidos los requisitos de uso limitado.</p>
+
+<h2>7. Cuánto tiempo conservamos los datos</h2>
+<p>Mientras mantengas tu cuenta. Puedes darte de baja tú mismo desde «Mi cuenta → Mis datos»: se borran tu cuenta, tus vehículos y tus citas. Los enlaces de confirmación y de restablecimiento de contraseña caducan por sí solos.</p>
+
+<h2>8. Tus derechos</h2>
+<p>Puedes acceder a tus datos, rectificarlos, suprimirlos, oponerte a su tratamiento, limitarlo y pedir su portabilidad. Muchos de ellos puedes ejercerlos tú mismo desde «Mi cuenta»; para el resto escribe a <a href="mailto:isrfernandez.innovation@gmail.com">isrfernandez.innovation@gmail.com</a>. Si crees que no hemos tratado bien tus datos, puedes reclamar ante la Agencia Española de Protección de Datos (<a href="https://www.aepd.es">www.aepd.es</a>).</p>
+
+<h2>9. Seguridad</h2>
+<p>Las conexiones al sitio van cifradas (HTTPS), las contraseñas se guardan cifradas, la sesión usa una cookie HttpOnly y las acciones irreversibles, como borrar la cuenta, exigen confirmar con tu contraseña.</p>
+
+<h2>10. Cambios en esta política</h2>
+<p>Si cambiamos esta política, publicaremos aquí la nueva versión con su fecha de actualización.</p>
+</article>
+<footer><a href="/">Volver a la web</a> · <a href="/privacidad.html">Política de privacidad</a> · <a href="/terminos.html">Términos del servicio</a></footer>
+</main>
+</body>
+</html>
