@@ -20,6 +20,7 @@ builder.Services.Configure<ShopOptions>(cfg.GetSection("Shop"));
 builder.Services.Configure<SeedOptions>(cfg.GetSection("Seed"));
 builder.Services.Configure<AuthOptions>(cfg.GetSection("Auth"));
 builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient<GmailApiSender>(http => http.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddSingleton<EmailService>();
 
 // MongoClient es thread-safe y debe ser singleton.

@@ -40,7 +40,19 @@ public sealed class SmtpOptions
     public string FromName { get; set; } = "Asistente del taller";
 
     /// <summary>Si falta Host o From, la función de email queda desactivada y la web oculta el botón.</summary>
-    public bool Enabled => !string.IsNullOrWhiteSpace(Host) && !string.IsNullOrWhiteSpace(From);
+    public bool Enabled => !string.IsNullOrWhiteSpace(From) && (UseGmailApi || !string.IsNullOrWhiteSpace(Host));
+
+    /// <summary>Envío por la API de Gmail (HTTPS, puerto 443) en vez de SMTP: para hosting que bloquea los puertos SMTP.</summary>
+    public bool UseGmailApi => !string.IsNullOrWhiteSpace(Gmail.RefreshToken);
+    public GmailOptions Gmail { get; set; } = new();
+}
+
+/// <summary>Credenciales OAuth2 de la cuenta de Gmail que envía (<c>Smtp:From</c> debe ser esa misma cuenta).</summary>
+public sealed class GmailOptions
+{
+    public string ClientId { get; set; } = "";
+    public string ClientSecret { get; set; } = "";
+    public string RefreshToken { get; set; } = "";
 }
 
 /// <summary>Reglas de la agenda de citas.</summary>

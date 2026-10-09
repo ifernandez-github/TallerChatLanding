@@ -16,6 +16,8 @@ import { site } from '../../content/site'
         <RouterLink to="/contacto">Contacto</RouterLink>
         <RouterLink to="/cita">Pedir cita</RouterLink>
         <RouterLink to="/mi-cuenta">Mis citas</RouterLink>
+        <a href="/privacidad.html">Política de privacidad</a>
+        <a href="/terminos.html">Términos del servicio</a>
       </nav>
     </div>
     <div class="lp-wrap foot-legal">

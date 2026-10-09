@@ -5,7 +5,7 @@ using MimeKit;
 
 namespace TallerChat.Api;
 
-public sealed class EmailService(IOptions<SmtpOptions> options)
+public sealed class EmailService(IOptions<SmtpOptions> options, GmailApiSender gmail)
 {
     /// <summary>Correo del chat: respuestas del asistente y sus fuentes (asunto y plantilla fijos).</summary>
     public async Task SendAsync(string to, IReadOnlyList<EmailItem> items, CancellationToken ct)
@@ -39,6 +39,7 @@ public sealed class EmailService(IOptions<SmtpOptions> options)
     private async Task DeliverAsync(MimeMessage msg, CancellationToken ct)
     {
         var o = options.Value;
+        if (o.UseGmailApi) { await gmail.SendAsync(msg, ct); return; }
         using var smtp = new SmtpClient { Timeout = 15_000 };
         await smtp.ConnectAsync(o.Host, o.Port, o.Security, ct);
         if (!string.IsNullOrEmpty(o.User)) await smtp.AuthenticateAsync(o.User, o.Password, ct);
