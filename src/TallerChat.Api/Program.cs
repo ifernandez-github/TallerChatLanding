@@ -80,12 +80,15 @@ builder.Services.AddRateLimiter(o =>
 var app = builder.Build();
 
 app.UseExceptionHandler();
+// Los estáticos van ANTES de UseRouting: si el enrutado va primero, el fallback del SPA ya ha elegido endpoint para
+// /assets/*.js y UseStaticFiles se lo salta, con lo que el navegador recibe index.html en lugar del JavaScript.
+app.UseDefaultFiles();
+app.UseStaticFiles(); // sirve el build de Vue desde wwwroot
+app.UseRouting();
 app.UseCors();
 app.UseAuthentication(); // antes del límite de peticiones para poder limitar por usuario
 app.UseRateLimiter();
 app.UseAuthorization();
-app.UseDefaultFiles();
-app.UseStaticFiles(); // sirve el build de Vue desde wwwroot
 
 if (app.Environment.IsDevelopment())
 {
