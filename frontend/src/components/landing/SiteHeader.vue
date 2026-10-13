@@ -7,7 +7,7 @@ import { useTheme } from '../../composables/useTheme'
 import Icon from '../Icon.vue'
 
 const { theme, toggle } = useTheme()
-const { user, isAdmin } = useAuth()
+const { user, isStaff } = useAuth()
 const route = useRoute()
 const scrolled = ref(false)
 const menu = ref(false)
@@ -16,7 +16,7 @@ const links = computed(() => [
   { to: '/servicios', label: 'Servicios' },
   { to: '/nosotros', label: 'Quiénes somos' },
   { to: '/contacto', label: 'Contacto' },
-  ...(isAdmin.value ? [{ to: '/admin', label: 'Administración' }] : [])
+  ...(isStaff.value ? [{ to: '/admin', label: user.value?.role === 'admin' ? 'Administración' : 'Gestión' }] : [])
 ])
 const account = computed(() => (user.value ? { to: '/mi-cuenta', label: 'Mis citas' } : { to: '/acceso', label: 'Acceder' }))
 

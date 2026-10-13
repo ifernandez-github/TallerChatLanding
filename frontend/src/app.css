@@ -332,3 +332,7 @@ tr.off td { opacity: .55; }
 .appt.highlight { border-color: var(--brand); box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 22%, transparent); animation: appt-pulse 1.6s ease-out 2; }
 @keyframes appt-pulse { 0% { background: color-mix(in srgb, var(--brand) 14%, var(--surface)); } 100% { background: var(--surface); } }
 @media (prefers-reduced-motion: reduce) { .appt.highlight { animation: none; background: color-mix(in srgb, var(--brand) 10%, var(--surface)); } }
+
+/* Panel de gestión: aviso de solicitudes pendientes y filtro por rol */
+.pending-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.role-filter { max-width: 260px; margin-bottom: 12px; }

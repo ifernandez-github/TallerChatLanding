@@ -71,8 +71,8 @@ public sealed class Notifier(EmailService mail, IOptions<SmtpOptions> smtp, Book
         email.EndsWith("@" + shop.Value.PlaceholderDomain, StringComparison.OrdinalIgnoreCase) ? smtp.Value.From : email;
 
     /// <summary>
-    /// Avisa a la administración de una nueva solicitud o de una cancelación, con un enlace directo a esa cita
-    /// en la agenda. Va a todas las cuentas con rol de administración activas y con el correo confirmado; varias
+    /// Avisa a la administración y a los gestores de una nueva solicitud o de una cancelación, con un enlace directo a esa cita
+    /// en la agenda. Va a todas las cuentas con rol de administrador o gestor activas y con el correo confirmado; varias
     /// de ellas pueden compartir el mismo buzón real tras <see cref="ResolveAdminAddress"/>, así que no se repite.
     /// </summary>
     public async Task<SendResult> NotifyAdminsAsync(EmailKind kind, AppUser customer, Appointment a, CancellationToken ct)
@@ -87,7 +87,7 @@ public sealed class Notifier(EmailService mail, IOptions<SmtpOptions> smtp, Book
             // (p.ej. "@torque.es") nunca puede verificarse por sí misma -- su aviso se redirige igualmente
             // al remitente real en ResolveAdminAddress, así que exigir EmailVerified la dejaría sin avisos para siempre.
             var admins = await db.Users
-                .Find(u => u.Role == Roles.Admin && u.Active)
+                .Find(u => (u.Role == Roles.Admin || u.Role == Roles.Manager) && u.Active)
                 .Project(u => u.Email).ToListAsync(ct);
             var targets = admins.Select(ResolveAdminAddress).Where(e => !string.IsNullOrWhiteSpace(e))
                 .Distinct(StringComparer.OrdinalIgnoreCase).ToList();

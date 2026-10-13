@@ -64,6 +64,20 @@ Si ambos valores son válidos (la contraseña necesita 10+ caracteres con letras
 cuenta, la API crea el administrador la primera vez que arranca. Inicia sesión en `/acceso` con esas credenciales
 para llegar a `/admin`.
 
+### Roles
+| Rol | Qué puede hacer |
+|---|---|
+| `client` (Cliente) | Su área `/mi-cuenta`: reservar y cancelar sus citas, sus datos y sus vehículos. |
+| `manager` (Gestor) | Entra en `/admin`: agenda (confirmar, cancelar y completar citas) y fichas de **clientes** (editar, vehículos, activar/desactivar, eliminar). **No ve ni toca** a administradores ni a otros gestores, y no puede cambiar roles. |
+| `admin` (Administrador) | Todo lo anterior y, además, gestiona clientes, gestores y administradores, y es el único que cambia roles. |
+
+El gestor lo crea un administrador: en `/admin` → pestaña "Usuarios", abre la ficha de la persona (que antes debe haberse
+registrado como cliente) y cambia el campo "Rol" a *Gestor*. Los permisos se aplican en la API (política `staff` en
+`/api/admin` y comprobación de la cuenta afectada en cada operación sobre usuarios, ver `Roles.CanManage`), no solo en la
+interfaz. Gestores y administradores activos reciben el aviso por correo de cada nueva solicitud o cancelación de cita.
+Al iniciar sesión, administradores y gestores van directamente a `/admin`, que se abre con las solicitudes **pendientes
+de confirmar** (si no hay ninguna, con la agenda de hoy).
+
 ### Datos de ejemplo (opcional, solo para probar)
 `appsettings.Development.json` trae `Seed:Demo = true`: crea 4 clientes de ejemplo (`nombre.apellido@demo.taller`,
 contraseña `Demo1234!`) con un historial de citas variado (completadas, canceladas, confirmadas y pendientes).
@@ -94,8 +108,9 @@ Abre http://localhost:5173 (Vite redirige `/api` a la API).
   que llega al formulario con ese servicio ya seleccionado.
 - `/admin` — calendario mensual de ocupación con código de colores (libre / parcial / completo / cerrado) y el
   número de citas de cada día; al pulsar un día se abre su agenda con las acciones de confirmar, cancelar y
-  completar. Segunda pestaña con la ficha completa de cada cliente (datos, dirección, rol y sus vehículos),
-  activar/desactivar cuentas y eliminarlas. Requiere sesión de administrador.
+  completar. Al entrar muestra primero las solicitudes pendientes de confirmar. Segunda pestaña con la ficha completa
+  de cada usuario (datos, dirección, rol y sus vehículos), activar/desactivar cuentas y eliminarlas. Requiere sesión
+  de administrador o de gestor (el gestor solo ve y gestiona clientes; ver "Roles").
 
 **Personalizar (todo en `frontend/src/content/site.ts`, son datos de ejemplo):** nombre y marca (`brand`), textos,
 servicios, estadísticas, teléfono, email, horario y dirección. La ubicación del mapa sale de `address.lat` y
@@ -161,7 +176,7 @@ básica. Para producción con dominio propio compensa un proveedor transaccional
 - **Citas**: solicitud recibida, confirmación (con `.ics` adjunto), cancelación y recordatorio 24 h antes
   (`ReminderService`, revisa cada 15 minutos). Siempre al correo de la cuenta; el cliente nunca elige el
   destinatario ni el contenido (`AppointmentEmails`, `Notifier`).
-- **Aviso a la administración**: cuando un cliente pide una cita o la cancela, todas las cuentas de administración
+- **Aviso a la administración**: cuando un cliente pide una cita o la cancela, todas las cuentas de administrador y de gestor
   activas reciben un correo aparte con un enlace directo a esa cita en la agenda (`/admin?fecha=…&cita=…`, que
   abre ese día y resalta la cita). Si la cuenta de administración usa el dominio de ejemplo del taller
   (`Shop:PlaceholderDomain`, "torque.es" por defecto — no es un buzón real), el aviso se manda en su lugar al
@@ -195,7 +210,8 @@ correo que tuviera pendientes. No hay papelera ni forma de recuperarlo.
 - **El cliente** se da de baja desde `/mi-cuenta` → pestaña "Mis datos". Antes de confirmar ve cuántos vehículos y
   cuántas citas va a perder (y cuántas de esas citas todavía no han pasado) y tiene que **escribir su contraseña**:
   con una sesión olvidada abierta en un ordenador prestado no se puede borrar nada.
-- **El taller** borra cualquier cuenta desde `/admin` → pestaña "Clientes" → "Eliminar". El aviso muestra lo mismo,
+- **El taller** borra una cuenta desde `/admin` → pestaña "Usuarios" (o "Clientes", si eres gestor) → "Eliminar"; un
+  gestor solo puede borrar clientes. El aviso muestra lo mismo,
   contado en ese momento, y hay que **teclear el correo exacto** de la cuenta: así un clic en la fila equivocada no
   borra a quien no toca. El cliente recibe un correo avisándole de la baja.
 - **Nunca se puede borrar (ni degradar, ni desactivar) la última cuenta de administración** con la que se pueda
@@ -296,10 +312,19 @@ para enviar correo como esa cuenta: guárdalo solo como variable secreta (nunca 
 El `Dockerfile` de la raíz compila la web y la API en una sola imagen (escucha en `PORT`, que Render inyecta; 8080 si
 no existe) y ya activa `ASPNETCORE_FORWARDEDHEADERS_ENABLED`. En Render: *New → Web Service*, entorno **Docker**, y en
 *Environment* las variables `Mongo__ConnectionString`, `Gemini__ApiKey`, `Shop__PublicBaseUrl` (la URL pública,
-p. ej. `https://tu-app.onrender.com`), `Smtp__From` y, para el primer arranque, `Seed__AdminEmail` y
+p. ej. `https://tu-app.onrender.com`, con `https://` y sin barra final), `Smtp__From` y, para el primer arranque, `Seed__AdminEmail` y
 `Seed__AdminPassword`. Para el correo en el plan gratuito usa la API de Gmail (sección anterior); con SMTP añade
 también `Smtp__User` y `Smtp__Password`. En MongoDB Atlas permite el acceso desde las IP de Render (o `0.0.0.0/0`).
 Las claves de sesión viven dentro del contenedor: tras cada despliegue los usuarios tienen que volver a iniciar sesión.
+
+**URL de los enlaces de los correos.** Los enlaces de los emails (confirmar cuenta, restablecer contraseña, "Ver mis
+citas", enlace a la agenda) se construyen sobre la URL pública de la web, nunca sobre `localhost`. Se elige en este
+orden (`Services/PublicUrl.cs`): 1) `Shop__PublicBaseUrl`, si es una URL real (si falta el `https://` se añade);
+2) `RENDER_EXTERNAL_URL`, que Render define sola con la dirección del servicio; 3) como último recurso, la dirección
+con la que llega la primera petición (válida detrás del proxy gracias a `ForwardedHeaders`), con un aviso en el log.
+Si `Shop__PublicBaseUrl` vale `localhost` o está vacía, los correos ya no salen con `localhost` en Render. Aun así
+conviene fijarla (con un dominio propio, p. ej., `RENDER_EXTERNAL_URL` seguiría apuntando a `onrender.com`). En
+desarrollo (`ASPNETCORE_ENVIRONMENT=Development`) se usa `Shop:PublicBaseUrl` tal cual (`http://localhost:5173`).
 ```
 docker build -t tallerchat .
 docker run -p 8080:8080 -e Mongo__ConnectionString=... -e Gemini__ApiKey=... tallerchat
@@ -314,6 +339,8 @@ docker run -p 8080:8080 -e Mongo__ConnectionString=... -e Gemini__ApiKey=... tal
 | Reintentos, tiempos y modelos de Gemini | `Gemini:*` en `appsettings.json` |
 | Horario, franjas, elevadores y antelación | `Booking:*` en `appsettings.json` |
 | Datos del taller en los correos | `Shop:*` en `appsettings.json` |
+| URL base de los enlaces de los correos | `Shop:PublicBaseUrl` (en Render, `Shop__PublicBaseUrl`) |
+| Quién puede hacer qué (roles Cliente / Gestor / Administrador) | `Roles` en `Data/Entities.cs` y `AdminEndpoints` |
 | Catálogo de servicios reservables | `Services/Catalog.cs` (ids deben coincidir con `site.ts`) |
 | Textos de cada página de servicio | `services` en `frontend/src/content/site.ts` |
 | Máximo de vehículos por cliente (10) | `ProfileEndpoints.MaxVehicles` |
@@ -349,8 +376,9 @@ docker run -p 8080:8080 -e Mongo__ConnectionString=... -e Gemini__ApiKey=... tal
 
 ## 8. Seguridad y privacidad
 - Contraseñas con PBKDF2-SHA256 (210.000 iteraciones) y sal aleatoria; nunca en texto plano ni en los logs.
-- Los datos personales y los vehículos solo los puede leer y editar su propietario o un administrador; el cliente
-  nunca puede cambiar su rol ni el correo de su cuenta desde la web.
+- Los datos personales y los vehículos solo los puede leer y editar su propietario, un administrador o (solo si es
+  una cuenta de cliente) un gestor; el cliente nunca puede cambiar su rol ni el correo de su cuenta desde la web, y
+  solo un administrador cambia roles. El control está en la API, no solo en la interfaz.
 - Sesión por cookie HttpOnly, `SameSite=Lax`, del mismo origen que la API; sin tokens en `localStorage`.
 - El chat solo lee de MongoDB con un usuario de mínimo privilegio; secretos fuera del repositorio.
 - No se usa `v-html`; el texto del modelo se pinta como texto plano.

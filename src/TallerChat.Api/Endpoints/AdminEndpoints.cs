@@ -17,7 +17,8 @@ public static class AdminEndpoints
 
     public static void MapAdminEndpoints(this IEndpointRouteBuilder app)
     {
-        var g = app.MapGroup("/api/admin").RequireAuthorization("admin");
+        // Administrador y gestor. Los gestores solo llegan a las cuentas de cliente (ver Roles.CanManage y GuardTargetAsync).
+        var g = app.MapGroup("/api/admin").RequireAuthorization("staff");
         g.MapGet("/summary", SummaryAsync);
         g.MapGet("/calendar", CalendarAsync);
         g.MapGet("/appointments", AppointmentsAsync);
@@ -113,9 +114,27 @@ public static class AdminEndpoints
         return Results.Ok(new BookResponse(AppointmentEndpoints.ToDto(updated), sent));
     }
 
-    private static async Task<IResult> UsersAsync(Db db, CancellationToken ct)
+    /// <summary>
+    /// Comprueba que quien llama puede gestionar la cuenta <paramref name="id"/>: el administrador, cualquiera;
+    /// el gestor, solo clientes. Devuelve la respuesta de error, o null si puede seguir.
+    /// </summary>
+    private static async Task<IResult?> GuardTargetAsync(string id, ClaimsPrincipal principal, Db db, CancellationToken ct)
     {
-        var users = await db.Users.Find(_ => true).SortBy(u => u.Name).Limit(500).ToListAsync(ct);
+        if (!ObjectId.TryParse(id, out _)) return ApiResults.Error(404, "Usuario no encontrado.");
+        var targetRole = await db.Users.Find(u => u.Id == id).Project(u => u.Role).FirstOrDefaultAsync(ct);
+        if (targetRole is null) return ApiResults.Error(404, "Usuario no encontrado.");
+        return Roles.CanManage(principal.FindFirstValue(ClaimTypes.Role), targetRole)
+            ? null
+            : ApiResults.Error(403, "Tu rol de gestor solo permite gestionar cuentas de cliente.");
+    }
+
+    private static async Task<IResult> UsersAsync(ClaimsPrincipal principal, Db db, CancellationToken ct)
+    {
+        // El gestor solo ve a los clientes: ni administradores ni otros gestores.
+        var filter = principal.IsInRole(Roles.Admin)
+            ? Builders<AppUser>.Filter.Empty
+            : Builders<AppUser>.Filter.Eq(u => u.Role, Roles.Client);
+        var users = await db.Users.Find(filter).SortBy(u => u.Name).Limit(500).ToListAsync(ct);
         var counts = await db.Appointments.Aggregate()
             .Group(a => a.UserId, g => new { UserId = g.Key, Count = g.Count() })
             .ToListAsync(ct);
@@ -127,8 +146,11 @@ public static class AdminEndpoints
     private static async Task<IResult> UpdateUserAsync(string id, AdminUserRequest req, ClaimsPrincipal principal, Db db,
         AccountDeletion deletion, IMemoryCache cache, CancellationToken ct)
     {
-        if (!ObjectId.TryParse(id, out _)) return ApiResults.Error(404, "Usuario no encontrado.");
+        if (await GuardTargetAsync(id, principal, db, ct) is { } denied) return denied;
         var role = req.Role;
+        // Solo el administrador reparte roles: el gestor edita la ficha del cliente, nada más.
+        if (role is not null && !principal.IsInRole(Roles.Admin))
+            return ApiResults.Error(403, "Solo un administrador puede cambiar el rol de una cuenta.");
         if (id == principal.UserId() && role is not null && role != Roles.Admin)
             return ApiResults.Error(400, "No puedes quitarte a ti mismo el rol de administrador.");
 
@@ -141,14 +163,14 @@ public static class AdminEndpoints
         return result;
     }
 
-    private static Task<IResult> AddVehicleAsync(string id, VehicleRequest req, Db db, CancellationToken ct)
-        => UserAdmin.AddVehicleAsync(db, id, req, ct);
+    private static async Task<IResult> AddVehicleAsync(string id, VehicleRequest req, ClaimsPrincipal principal, Db db, CancellationToken ct)
+        => await GuardTargetAsync(id, principal, db, ct) ?? await UserAdmin.AddVehicleAsync(db, id, req, ct);
 
-    private static Task<IResult> UpdateVehicleAsync(string id, string vehicleId, VehicleRequest req, Db db, CancellationToken ct)
-        => UserAdmin.UpdateVehicleAsync(db, id, vehicleId, req, ct);
+    private static async Task<IResult> UpdateVehicleAsync(string id, string vehicleId, VehicleRequest req, ClaimsPrincipal principal, Db db, CancellationToken ct)
+        => await GuardTargetAsync(id, principal, db, ct) ?? await UserAdmin.UpdateVehicleAsync(db, id, vehicleId, req, ct);
 
-    private static Task<IResult> DeleteVehicleAsync(string id, string vehicleId, Db db, CancellationToken ct)
-        => UserAdmin.DeleteVehicleAsync(db, id, vehicleId, ct);
+    private static async Task<IResult> DeleteVehicleAsync(string id, string vehicleId, ClaimsPrincipal principal, Db db, CancellationToken ct)
+        => await GuardTargetAsync(id, principal, db, ct) ?? await UserAdmin.DeleteVehicleAsync(db, id, vehicleId, ct);
 
     /// <summary>
     /// ¿Esa cuenta es el último administrador con el que se puede entrar? Se usa antes de borrarla,
@@ -161,9 +183,9 @@ public static class AdminEndpoints
     }
 
     /// <summary>Lo que se perderá con esa cuenta, contado en el momento de abrir el aviso de confirmación.</summary>
-    private static async Task<IResult> DeletionPreviewAsync(string id, Db db, AccountDeletion deletion, CancellationToken ct)
+    private static async Task<IResult> DeletionPreviewAsync(string id, ClaimsPrincipal principal, Db db, AccountDeletion deletion, CancellationToken ct)
     {
-        if (!ObjectId.TryParse(id, out _)) return ApiResults.Error(404, "Usuario no encontrado.");
+        if (await GuardTargetAsync(id, principal, db, ct) is { } denied) return denied;
         var user = await db.Users.Find(u => u.Id == id).FirstOrDefaultAsync(ct);
         return user is null ? ApiResults.Error(404, "Usuario no encontrado.") : Results.Ok(await deletion.PreviewAsync(user, ct));
     }
@@ -175,9 +197,9 @@ public static class AdminEndpoints
     private static async Task<IResult> DeleteUserAsync(string id, AdminDeleteUserRequest req, ClaimsPrincipal principal,
         Db db, AccountDeletion deletion, Notifier notifier, CancellationToken ct)
     {
-        if (!ObjectId.TryParse(id, out _)) return ApiResults.Error(404, "Usuario no encontrado.");
         if (id == principal.UserId())
             return ApiResults.Error(400, "No puedes borrar tu propia cuenta desde aquí. Hazlo desde tu área de cliente.");
+        if (await GuardTargetAsync(id, principal, db, ct) is { } denied) return denied;
 
         var user = await db.Users.Find(u => u.Id == id).FirstOrDefaultAsync(ct);
         if (user is null) return ApiResults.Error(404, "Usuario no encontrado.");
@@ -198,7 +220,7 @@ public static class AdminEndpoints
     private static async Task<IResult> SetActiveAsync(string id, ActiveRequest req, ClaimsPrincipal principal, Db db,
         AccountDeletion deletion, IMemoryCache cache, CancellationToken ct)
     {
-        if (!ObjectId.TryParse(id, out _)) return ApiResults.Error(404, "Usuario no encontrado.");
+        if (await GuardTargetAsync(id, principal, db, ct) is { } denied) return denied;
         if (req.Active is not { } active) return ApiResults.Error(400, "Indica si la cuenta debe estar activa.");
         if (id == principal.UserId()) return ApiResults.Error(400, "No puedes desactivar tu propia cuenta.");
 

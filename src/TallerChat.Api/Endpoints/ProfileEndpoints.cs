@@ -101,7 +101,7 @@ public static class UserAdmin
         }
         if (role is not null)
         {
-            if (role != Roles.Client && role != Roles.Admin) return ApiResults.Error(400, "El rol no es válido.");
+            if (!Roles.All.Contains(role)) return ApiResults.Error(400, "El rol no es válido.");
             update = update.Set(u => u.Role, role);
         }
 

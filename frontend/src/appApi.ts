@@ -11,8 +11,9 @@ export interface VehicleInput {
   make: string; model: string; plate: string
   year?: number | null; km?: number | null; fuel?: string | null; vin?: string | null
 }
+export type Role = 'client' | 'manager' | 'admin'
 export interface User {
-  id: string; name: string; email: string; phone?: string | null; role: 'client' | 'admin'
+  id: string; name: string; email: string; phone?: string | null; role: Role
   address?: Address | null; vehicles: Vehicle[]
 }
 export interface ProfileInput { name: string; phone: string; address: Address }
@@ -37,11 +38,11 @@ export interface AdminAppointment {
   notes?: string | null; status: Status
 }
 export interface AdminUser {
-  id: string; name: string; email: string; phone?: string | null; role: 'client' | 'admin'
+  id: string; name: string; email: string; phone?: string | null; role: Role
   active: boolean; emailVerified: boolean; createdAt: string; appointments: number
   address?: Address | null; vehicles: Vehicle[]
 }
-export interface AdminUserInput { name: string; email: string; phone: string; address: Address; role?: 'client' | 'admin' }
+export interface AdminUserInput { name: string; email: string; phone: string; address: Address; role?: Role }
 export interface Summary { pending: number; today: number; users: number }
 
 /** Lo que desaparece al borrar una cuenta. Se consulta antes de confirmar, para poder avisar con números reales. */

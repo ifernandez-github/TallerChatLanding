@@ -5,7 +5,19 @@ namespace TallerChat.Api;
 
 public static class Roles
 {
-    public const string Client = "client", Admin = "admin";
+    public const string Client = "client", Manager = "manager", Admin = "admin";
+
+    public static readonly string[] All = [Client, Manager, Admin];
+
+    /// <summary>Roles que entran en el panel de gestión: el administrador y el gestor.</summary>
+    public static readonly string[] Staff = [Manager, Admin];
+
+    /// <summary>
+    /// ¿Puede <paramref name="actor"/> ver y gestionar una cuenta con el rol <paramref name="target"/>?
+    /// El administrador gestiona a todos; el gestor solo a los clientes (nunca a gestores ni a administradores).
+    /// </summary>
+    public static bool CanManage(string? actor, string? target) =>
+        actor == Admin || (actor == Manager && target == Client);
 }
 
 public static class Statuses
