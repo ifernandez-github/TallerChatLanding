@@ -110,3 +110,6 @@ app.MapAdminEndpoints();
 app.MapFallbackToFile("{*path:regex(^(?!api/).*$)}", "index.html");
 
 app.Run();
+
+// Expone el punto de entrada a los tests de integración (WebApplicationFactory<Program>).
+public partial class Program;

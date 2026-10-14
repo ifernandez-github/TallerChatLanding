@@ -12,3 +12,4 @@ src/TallerChat.Api/wwwroot/
 Dockerfile
 .dockerignore
 *.md
+tests/

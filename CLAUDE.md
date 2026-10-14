@@ -41,7 +41,7 @@ App web de un taller: landing, chatbot sobre la base de conocimiento, gestión d
 - API: `dotnet run --project src/TallerChat.Api` (http://localhost:5080)
 - Web: `cd frontend && npm install && npm run dev` (http://localhost:5173, proxy de /api)
 - Build web: `cd frontend && npm run build`
-- Tests: `dotnet test` (cuando existan)
+- Tests: `dotnet test` (unitarios + integración; la integración usa MongoDB real vía `TALLER_TEST_MONGO` o Docker, ver `docs/testing.md`)
 
 ## Reglas
 ### General
