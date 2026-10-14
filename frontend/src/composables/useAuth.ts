@@ -39,5 +39,9 @@ export function useAuth() {
   /** Refresca el usuario en memoria tras editar la ficha o los vehículos. */
   function setUser(u: User) { user.value = u }
 
-  return { user, ready, isAdmin: computed(() => user.value?.role === 'admin'), load, login, register, logout, setUser }
+  const isAdmin = computed(() => user.value?.role === 'admin')
+  /** Administrador o gestor: acceso al panel de gestión (agenda y clientes). */
+  const isStaff = computed(() => user.value?.role === 'admin' || user.value?.role === 'manager')
+
+  return { user, ready, isAdmin, isStaff, load, login, register, logout, setUser }
 }

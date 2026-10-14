@@ -8,7 +8,9 @@ App web de un taller: landing, chatbot sobre la base de conocimiento, gestión d
   administración. Todo se guarda en `taller_db.appointments` (MongoDB Atlas).
 - **Usuarios**: cuenta con email y contraseña (`taller_db.users`), con teléfono, dirección y sus vehículos; un cliente
   ve y cancela sus propias citas, edita sus datos y gestiona sus vehículos; un administrador gestiona la agenda
-  (con calendario de ocupación), las fichas de cliente y sus vehículos.
+  (con calendario de ocupación), las fichas de usuario (clientes, gestores y administradores) y sus vehículos; un
+  gestor (`Roles.Manager`) hace lo mismo pero solo con clientes. Los permisos se aplican en la API (`Roles.CanManage`,
+  política `staff`), no solo en la web.
 
 ## Estructura
 - `src/TallerChat.Api`: .NET 10 Minimal API.
@@ -39,7 +41,7 @@ App web de un taller: landing, chatbot sobre la base de conocimiento, gestión d
 - API: `dotnet run --project src/TallerChat.Api` (http://localhost:5080)
 - Web: `cd frontend && npm install && npm run dev` (http://localhost:5173, proxy de /api)
 - Build web: `cd frontend && npm run build`
-- Tests: `dotnet test` (cuando existan)
+- Tests: `dotnet test` (unitarios + integración; la integración usa MongoDB real vía `TALLER_TEST_MONGO` o Docker, ver `docs/testing.md`)
 
 ## Reglas
 ### General

@@ -39,7 +39,13 @@ public static class AuthSetup
             o.Events.OnRedirectToAccessDenied = c => { c.Response.StatusCode = StatusCodes.Status403Forbidden; return Task.CompletedTask; };
             o.Events.OnValidatePrincipal = ValidateAsync;
         });
-        services.AddAuthorization(o => o.AddPolicy("admin", p => p.RequireRole(Roles.Admin)));
+        services.AddAuthorization(o =>
+        {
+            o.AddPolicy("admin", p => p.RequireRole(Roles.Admin));
+            // Panel de gestión (agenda y clientes): administrador y gestor. Qué cuentas puede tocar cada uno
+            // lo decide Roles.CanManage dentro de los endpoints.
+            o.AddPolicy("staff", p => p.RequireRole(Roles.Staff));
+        });
         return services;
     }
 

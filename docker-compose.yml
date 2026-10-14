@@ -1,0 +1,51 @@
+# Entorno local: MongoDB + API (imagen del Dockerfile, sirve la web compilada) + Vite en modo dev.
+# Secretos en .env (no versionado; ver .env.example).
+services:
+  mongo:
+    image: mongo:7.0
+    ports: ["27017:27017"]
+    volumes: ["mongo_data:/data/db"]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # Aplica scripts/mongo-setup.js (solo el índice de texto; el usuario chat_reader no se crea en local).
+  mongo-setup:
+    image: mongo:7.0
+    depends_on:
+      mongo: { condition: service_healthy }
+    volumes: ["./scripts/mongo-setup.js:/scripts/mongo-setup.js:ro"]
+    entrypoint: ["sh", "-c", "sed '/createUser/d' /scripts/mongo-setup.js > /tmp/setup.js && mongosh mongodb://mongo:27017/taller_db /tmp/setup.js"]
+    restart: "no"
+
+  api:
+    build: .
+    ports: ["8080:8080"]
+    depends_on:
+      mongo: { condition: service_healthy }
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Mongo__ConnectionString: mongodb://mongo:27017
+      Mongo__Database: taller_db
+      Gemini__ApiKey: ${GEMINI_API_KEY:-}
+      Seed__AdminEmail: ${SEED_ADMIN_EMAIL:-admin@taller.local}
+      Seed__AdminPassword: ${SEED_ADMIN_PASSWORD:-}
+      Shop__PublicBaseUrl: http://localhost:8080
+
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm ci && npm run dev -- --host"
+    ports: ["5173:5173"]
+    volumes:
+      - ./frontend:/app
+      - web_node_modules:/app/node_modules
+    environment:
+      VITE_API_PROXY: http://api:8080
+    depends_on: [api]
+
+volumes:
+  mongo_data:
+  web_node_modules:

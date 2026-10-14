@@ -64,6 +64,20 @@ Si ambos valores son válidos (la contraseña necesita 10+ caracteres con letras
 cuenta, la API crea el administrador la primera vez que arranca. Inicia sesión en `/acceso` con esas credenciales
 para llegar a `/admin`.
 
+### Roles
+| Rol | Qué puede hacer |
+|---|---|
+| `client` (Cliente) | Su área `/mi-cuenta`: reservar y cancelar sus citas, sus datos y sus vehículos. |
+| `manager` (Gestor) | Entra en `/admin`: agenda (confirmar, cancelar y completar citas) y fichas de **clientes** (editar, vehículos, activar/desactivar, eliminar). **No ve ni toca** a administradores ni a otros gestores, y no puede cambiar roles. |
+| `admin` (Administrador) | Todo lo anterior y, además, gestiona clientes, gestores y administradores, y es el único que cambia roles. |
+
+El gestor lo crea un administrador: en `/admin` → pestaña "Usuarios", abre la ficha de la persona (que antes debe haberse
+registrado como cliente) y cambia el campo "Rol" a *Gestor*. Los permisos se aplican en la API (política `staff` en
+`/api/admin` y comprobación de la cuenta afectada en cada operación sobre usuarios, ver `Roles.CanManage`), no solo en la
+interfaz. Gestores y administradores activos reciben el aviso por correo de cada nueva solicitud o cancelación de cita.
+Al iniciar sesión, administradores y gestores van directamente a `/admin`, que se abre con las solicitudes **pendientes
+de confirmar** (si no hay ninguna, con la agenda de hoy).
+
 ### Datos de ejemplo (opcional, solo para probar)
 `appsettings.Development.json` trae `Seed:Demo = true`: crea 4 clientes de ejemplo (`nombre.apellido@demo.taller`,
 contraseña `Demo1234!`) con un historial de citas variado (completadas, canceladas, confirmadas y pendientes).
@@ -94,8 +108,9 @@ Abre http://localhost:5173 (Vite redirige `/api` a la API).
   que llega al formulario con ese servicio ya seleccionado.
 - `/admin` — calendario mensual de ocupación con código de colores (libre / parcial / completo / cerrado) y el
   número de citas de cada día; al pulsar un día se abre su agenda con las acciones de confirmar, cancelar y
-  completar. Segunda pestaña con la ficha completa de cada cliente (datos, dirección, rol y sus vehículos),
-  activar/desactivar cuentas y eliminarlas. Requiere sesión de administrador.
+  completar. Al entrar muestra primero las solicitudes pendientes de confirmar. Segunda pestaña con la ficha completa
+  de cada usuario (datos, dirección, rol y sus vehículos), activar/desactivar cuentas y eliminarlas. Requiere sesión
+  de administrador o de gestor (el gestor solo ve y gestiona clientes; ver "Roles").
 
 **Personalizar (todo en `frontend/src/content/site.ts`, son datos de ejemplo):** nombre y marca (`brand`), textos,
 servicios, estadísticas, teléfono, email, horario y dirección. La ubicación del mapa sale de `address.lat` y
@@ -161,7 +176,7 @@ básica. Para producción con dominio propio compensa un proveedor transaccional
 - **Citas**: solicitud recibida, confirmación (con `.ics` adjunto), cancelación y recordatorio 24 h antes
   (`ReminderService`, revisa cada 15 minutos). Siempre al correo de la cuenta; el cliente nunca elige el
   destinatario ni el contenido (`AppointmentEmails`, `Notifier`).
-- **Aviso a la administración**: cuando un cliente pide una cita o la cancela, todas las cuentas de administración
+- **Aviso a la administración**: cuando un cliente pide una cita o la cancela, todas las cuentas de administrador y de gestor
   activas reciben un correo aparte con un enlace directo a esa cita en la agenda (`/admin?fecha=…&cita=…`, que
   abre ese día y resalta la cita). Si la cuenta de administración usa el dominio de ejemplo del taller
   (`Shop:PlaceholderDomain`, "torque.es" por defecto — no es un buzón real), el aviso se manda en su lugar al
@@ -195,7 +210,8 @@ correo que tuviera pendientes. No hay papelera ni forma de recuperarlo.
 - **El cliente** se da de baja desde `/mi-cuenta` → pestaña "Mis datos". Antes de confirmar ve cuántos vehículos y
   cuántas citas va a perder (y cuántas de esas citas todavía no han pasado) y tiene que **escribir su contraseña**:
   con una sesión olvidada abierta en un ordenador prestado no se puede borrar nada.
-- **El taller** borra cualquier cuenta desde `/admin` → pestaña "Clientes" → "Eliminar". El aviso muestra lo mismo,
+- **El taller** borra una cuenta desde `/admin` → pestaña "Usuarios" (o "Clientes", si eres gestor) → "Eliminar"; un
+  gestor solo puede borrar clientes. El aviso muestra lo mismo,
   contado en ese momento, y hay que **teclear el correo exacto** de la cuenta: así un clic en la fila equivocada no
   borra a quien no toca. El cliente recibe un correo avisándole de la baja.
 - **Nunca se puede borrar (ni degradar, ni desactivar) la última cuenta de administración** con la que se pueda
@@ -216,26 +232,99 @@ los clientes comparten la misma IP a ojos de la API: el límite de 10 peticiones
 aplicaría a todo el sitio a la vez y el login dejaría de funcionar con tráfico normal. Recuerda también poner
 `Shop:PublicBaseUrl` con el dominio real, porque de ahí salen los enlaces de los correos.
 
-### Correo por la API de Gmail (cuando el hosting bloquea SMTP)
-El plan gratuito de Render bloquea los puertos 25, 465 y 587, así que el SMTP de Gmail da `TimeoutException`. Si
-`Smtp:Gmail:RefreshToken` tiene valor, el correo sale por la API de Gmail (HTTPS, puerto 443) y se ignoran `Smtp:Host`,
-`Port`, `User` y `Password`; `Smtp:From` debe ser la cuenta de Gmail autorizada. Sin ese valor se sigue usando SMTP.
-1. En Google Cloud Console crea un proyecto, activa **Gmail API** y crea unas credenciales **OAuth client ID** de tipo
-   *Web application* con `https://developers.google.com/oauthplayground` como URI de redirección.
-2. En la pantalla de consentimiento pon la app en **Production** (en *Testing* el refresh token caduca a los 7 días).
-3. En [OAuth Playground](https://developers.google.com/oauthplayground), en la rueda de ajustes marca *Use your own OAuth
-   credentials* y pega el client ID y el secret; autoriza el ámbito `https://www.googleapis.com/auth/gmail.send` con la
-   cuenta que enviará y pulsa *Exchange authorization code for tokens*: copia el **refresh token**.
-4. En Render añade `Smtp__Gmail__ClientId`, `Smtp__Gmail__ClientSecret` y `Smtp__Gmail__RefreshToken`, y comprueba que
-   `Smtp__From` es esa misma cuenta.
+### Correo por la API de Gmail (Render y otros hostings que bloquean SMTP)
+**Por qué.** Los servicios web del plan gratuito de Render no pueden abrir conexiones salientes por los puertos 25, 465
+ni 587. El SMTP de Gmail (587) acaba en `TimeoutException`, y la web responde 502 "No se pudo enviar el correo ahora
+mismo". La API de Gmail va por HTTPS (puerto 443), que no está bloqueado.
+
+**Cómo se elige.** Si `Smtp:Gmail:RefreshToken` tiene valor, todo el correo (chat, citas, confirmación de cuenta,
+restablecer contraseña, baja) sale por la API de Gmail y se ignoran `Smtp:Host`, `Port`, `Security`, `User` y
+`Password`. Si está vacío, se usa SMTP como siempre (en local no cambia nada). En ambos casos `Smtp:From` es
+obligatorio y, con la API de Gmail, **debe ser la misma cuenta que autoriza el token**. El código está en
+`Services/GmailApiSender.cs`; solo pide el permiso `gmail.send` (enviar), nunca lee el buzón.
+
+**Variables.** En Render (*Environment*) o en user-secrets:
+
+| Variable | Valor |
+|---|---|
+| `Smtp__Gmail__ClientId` | `client_id` del cliente OAuth |
+| `Smtp__Gmail__ClientSecret` | `client_secret` del cliente OAuth |
+| `Smtp__Gmail__RefreshToken` | refresh token obtenido en el paso 5 |
+| `Smtp__From` | la cuenta de Gmail que envía (la que autorizó el token) |
+
+Escribe los nombres con **dos guiones bajos** (`Smtp__Gmail__ClientId`), no con dos puntos: Render no admite `:` en
+los nombres de variable y .NET convierte `__` en `:` al leerlas. Del JSON del cliente solo se usan `client_id` y
+`client_secret`; `project_id`, `auth_uri`, `token_uri` y `auth_provider_x509_cert_url` no hacen falta.
+
+#### Configuración en Google (una sola vez)
+1. **Proyecto y API.** En [Google Cloud Console](https://console.cloud.google.com) crea un proyecto (p. ej.
+   `TallerTorque`) y, en *APIs y servicios → Biblioteca*, activa **Gmail API**.
+2. **Información de la marca** (*Google Auth Platform → Información de la marca*). Aunque Google los marque como
+   opcionales, **hay que rellenar todo esto o el botón "Publicar app" no se activa**:
+   - Nombre de la aplicación, correo de asistencia al usuario y correo de contacto del desarrollador.
+   - **Página de la aplicación**: la URL pública de la web (p. ej. `https://tu-app.onrender.com`).
+   - **Política de privacidad**: `https://tu-app.onrender.com/privacidad.html`.
+   - **Condiciones del servicio**: `https://tu-app.onrender.com/terminos.html`.
+   - **Dominios autorizados**: el dominio de la web (p. ej. `tu-app.onrender.com`).
+
+   Las dos páginas legales son estáticas (`frontend/public/privacidad.html` y `terminos.html`, enlazadas en el pie de
+   la web), así que **despliega primero** y comprueba que abren antes de pegar las URL. Revisa sus textos (titular y
+   contacto) antes de publicar.
+3. **Publicar la app** (*Público → Publicar app*, estado "En producción"). Mientras esté en "Prueba":
+   - Google bloquea el acceso con `Error 403: access_denied` a cualquier cuenta que no sea *usuario de prueba*.
+   - El refresh token **caduca a los 7 días**, aunque publiques después: publica **antes** de sacar el token.
+
+   Una app en producción sin verificar funciona para uso propio (límite de 100 usuarios); Google solo muestra el
+   aviso "app no verificada" al autorizar.
+4. **Cliente OAuth** (*Clientes → Crear cliente*): tipo **Aplicación web**, y en *URIs de redirección autorizados*
+   añade `https://developers.google.com/oauthplayground` (y pulsa **Guardar**; puede tardar unos minutos en
+   aplicarse). **Copia el `client_secret` al crearlo**: Google no vuelve a mostrarlo (solo se ven los últimos
+   caracteres). Si lo pierdes, añade un secreto nuevo.
+5. **Refresh token** con [OAuth 2.0 Playground](https://developers.google.com/oauthplayground):
+   1. Rueda de ajustes ⚙ → marca **Use your own OAuth credentials** y pega el client ID y el client secret. Esto se
+      pierde al recargar la página; sin ello el Playground revoca el token a las 24 h.
+   2. *Step 1*: en **Input your own scopes** escribe `https://www.googleapis.com/auth/gmail.send` y pulsa
+      **Authorize APIs**.
+   3. En Google elige la cuenta que enviará los correos. Si avisa de que la app no está verificada: *Avanzado →
+      Ir a (nombre de la app)*. Acepta el permiso de enviar correo.
+   4. Vuelves con el código ya escrito en *Step 2*: pulsa **Exchange authorization code for tokens** y copia el
+      **Refresh token** (suele empezar por `1//`).
+6. **Render.** Añade las variables de la tabla de arriba y vuelve a desplegar.
+7. **Prueba.** Inicia sesión, ve a *Mi cuenta → Citas* y pulsa **Enviármelas por email** (hace falta una cita
+   próxima). Debe llegar un correo y no salir el error 502.
+
+#### Si algo falla
+| Síntoma | Causa y arreglo |
+|---|---|
+| `Error 403: access_denied` al autorizar | La app sigue en "Prueba" y tu cuenta no es usuario de prueba. Publícala (paso 3) o añade la cuenta en *Público → Usuarios de prueba* (el token caducará a los 7 días). |
+| "Publicar app" desactivado | Falta algo en *Información de la marca* (paso 2): sobre todo las URL de política de privacidad y condiciones. Recarga la página tras guardar. |
+| Render dice que la clave no es válida | El nombre lleva `:` (`Smtp:Gmail:ClientId`). Usa `__`. |
+| *Authorization code* vacío en el Playground | Aún no has hecho el *Step 1*, o has recargado la página: repite los pasos 5.1 a 5.3. |
+| 502 "No se pudo enviar el correo" y en el log `TimeoutException` | Se está usando SMTP desde un hosting que lo bloquea: falta `Smtp__Gmail__RefreshToken` o está vacío. |
+| 502 y en el log `HttpRequestException` | Google rechazó la petición: client ID/secret incorrectos, Gmail API sin activar, token revocado o caducado (`invalid_grant`), o `Smtp__From` distinto de la cuenta que autorizó. Repite el paso 5 con credenciales propias. |
+| Dejó de funcionar al cabo de unos días | El token se generó con la app en "Prueba" (7 días), o se revocó el acceso en la cuenta de Google. Publica la app y genera uno nuevo. |
+
+**Notas.** Los logs solo guardan el tipo de excepción, nunca la dirección ni el mensaje. El refresh token da permiso
+para enviar correo como esa cuenta: guárdalo solo como variable secreta (nunca en git). Gmail limita el envío
+(del orden de 500 mensajes al día en una cuenta gratuita); para más volumen compensa un proveedor transaccional.
 
 ### Docker / Render
 El `Dockerfile` de la raíz compila la web y la API en una sola imagen (escucha en `PORT`, que Render inyecta; 8080 si
 no existe) y ya activa `ASPNETCORE_FORWARDEDHEADERS_ENABLED`. En Render: *New → Web Service*, entorno **Docker**, y en
 *Environment* las variables `Mongo__ConnectionString`, `Gemini__ApiKey`, `Shop__PublicBaseUrl` (la URL pública,
-p. ej. `https://tu-app.onrender.com`), `Smtp__User`, `Smtp__Password`, `Smtp__From` y, para el primer arranque,
-`Seed__AdminEmail` y `Seed__AdminPassword`. En MongoDB Atlas permite el acceso desde las IP de Render (o `0.0.0.0/0`).
+p. ej. `https://tu-app.onrender.com`, con `https://` y sin barra final), `Smtp__From` y, para el primer arranque, `Seed__AdminEmail` y
+`Seed__AdminPassword`. Para el correo en el plan gratuito usa la API de Gmail (sección anterior); con SMTP añade
+también `Smtp__User` y `Smtp__Password`. En MongoDB Atlas permite el acceso desde las IP de Render (o `0.0.0.0/0`).
 Las claves de sesión viven dentro del contenedor: tras cada despliegue los usuarios tienen que volver a iniciar sesión.
+
+**URL de los enlaces de los correos.** Los enlaces de los emails (confirmar cuenta, restablecer contraseña, "Ver mis
+citas", enlace a la agenda) se construyen sobre la URL pública de la web, nunca sobre `localhost`. Se elige en este
+orden (`Services/PublicUrl.cs`): 1) `Shop__PublicBaseUrl`, si es una URL real (si falta el `https://` se añade);
+2) `RENDER_EXTERNAL_URL`, que Render define sola con la dirección del servicio; 3) como último recurso, la dirección
+con la que llega la primera petición (válida detrás del proxy gracias a `ForwardedHeaders`), con un aviso en el log.
+Si `Shop__PublicBaseUrl` vale `localhost` o está vacía, los correos ya no salen con `localhost` en Render. Aun así
+conviene fijarla (con un dominio propio, p. ej., `RENDER_EXTERNAL_URL` seguiría apuntando a `onrender.com`). En
+desarrollo (`ASPNETCORE_ENVIRONMENT=Development`) se usa `Shop:PublicBaseUrl` tal cual (`http://localhost:5173`).
 ```
 docker build -t tallerchat .
 docker run -p 8080:8080 -e Mongo__ConnectionString=... -e Gemini__ApiKey=... tallerchat
@@ -250,6 +339,8 @@ docker run -p 8080:8080 -e Mongo__ConnectionString=... -e Gemini__ApiKey=... tal
 | Reintentos, tiempos y modelos de Gemini | `Gemini:*` en `appsettings.json` |
 | Horario, franjas, elevadores y antelación | `Booking:*` en `appsettings.json` |
 | Datos del taller en los correos | `Shop:*` en `appsettings.json` |
+| URL base de los enlaces de los correos | `Shop:PublicBaseUrl` (en Render, `Shop__PublicBaseUrl`) |
+| Quién puede hacer qué (roles Cliente / Gestor / Administrador) | `Roles` en `Data/Entities.cs` y `AdminEndpoints` |
 | Catálogo de servicios reservables | `Services/Catalog.cs` (ids deben coincidir con `site.ts`) |
 | Textos de cada página de servicio | `services` en `frontend/src/content/site.ts` |
 | Máximo de vehículos por cliente (10) | `ProfileEndpoints.MaxVehicles` |
@@ -285,8 +376,9 @@ docker run -p 8080:8080 -e Mongo__ConnectionString=... -e Gemini__ApiKey=... tal
 
 ## 8. Seguridad y privacidad
 - Contraseñas con PBKDF2-SHA256 (210.000 iteraciones) y sal aleatoria; nunca en texto plano ni en los logs.
-- Los datos personales y los vehículos solo los puede leer y editar su propietario o un administrador; el cliente
-  nunca puede cambiar su rol ni el correo de su cuenta desde la web.
+- Los datos personales y los vehículos solo los puede leer y editar su propietario, un administrador o (solo si es
+  una cuenta de cliente) un gestor; el cliente nunca puede cambiar su rol ni el correo de su cuenta desde la web, y
+  solo un administrador cambia roles. El control está en la API, no solo en la interfaz.
 - Sesión por cookie HttpOnly, `SameSite=Lax`, del mismo origen que la API; sin tokens en `localStorage`.
 - El chat solo lee de MongoDB con un usuario de mínimo privilegio; secretos fuera del repositorio.
 - No se usa `v-html`; el texto del modelo se pinta como texto plano.

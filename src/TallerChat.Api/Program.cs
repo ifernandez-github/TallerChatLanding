@@ -17,6 +17,8 @@ builder.Services.Configure<GeminiOptions>(cfg.GetSection("Gemini"));
 builder.Services.Configure<SmtpOptions>(cfg.GetSection("Smtp"));
 builder.Services.Configure<BookingOptions>(cfg.GetSection("Booking"));
 builder.Services.Configure<ShopOptions>(cfg.GetSection("Shop"));
+// Los enlaces de los correos usan la URL pública: Shop:PublicBaseUrl, o la que Render define en RENDER_EXTERNAL_URL.
+builder.Services.PostConfigure<ShopOptions>(o => o.PublicBaseUrl = PublicUrl.Resolve(o.PublicBaseUrl, cfg["RENDER_EXTERNAL_URL"]));
 builder.Services.Configure<SeedOptions>(cfg.GetSection("Seed"));
 builder.Services.Configure<AuthOptions>(cfg.GetSection("Auth"));
 builder.Services.AddMemoryCache();
@@ -81,6 +83,7 @@ builder.Services.AddRateLimiter(o =>
 var app = builder.Build();
 
 app.UseExceptionHandler();
+app.UsePublicUrlFromRequest(); // último recurso si no hay Shop:PublicBaseUrl ni RENDER_EXTERNAL_URL
 // Los estáticos van ANTES de UseRouting: si el enrutado va primero, el fallback del SPA ya ha elegido endpoint para
 // /assets/*.js y UseStaticFiles se lo salta, con lo que el navegador recibe index.html en lugar del JavaScript.
 app.UseDefaultFiles();
@@ -107,3 +110,6 @@ app.MapAdminEndpoints();
 app.MapFallbackToFile("{*path:regex(^(?!api/).*$)}", "index.html");
 
 app.Run();
+
+// Expone el punto de entrada a los tests de integración (WebApplicationFactory<Program>).
+public partial class Program;

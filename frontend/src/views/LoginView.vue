@@ -8,7 +8,7 @@ import { useAuth } from '../composables/useAuth'
 
 const route = useRoute()
 const router = useRouter()
-const { login, register } = useAuth()
+const { user, login, register } = useAuth()
 
 type Mode = 'login' | 'register' | 'forgot'
 type Panel = 'registered' | 'forgot-sent'
@@ -51,7 +51,8 @@ async function submit() {
   try {
     if (mode.value === 'login') {
       await login(email.value, password.value)
-      await router.replace(target.value ?? '/mi-cuenta')
+      // Administradores y gestores entran directamente al panel, donde ven las citas pendientes de confirmar.
+      await router.replace(target.value ?? (user.value?.role === 'client' ? '/mi-cuenta' : '/admin'))
     } else if (mode.value === 'register') {
       if (!emailsMatch.value) { error.value = 'Los dos correos no coinciden.'; return }
       const result = await register(name.value, email.value, emailConfirm.value, phone.value, password.value)

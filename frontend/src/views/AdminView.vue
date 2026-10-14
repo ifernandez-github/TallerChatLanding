@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import {
-  api, errMsg, type AdminAppointment, type AdminUser, type CalendarDay, type DeletionSummary, type Status,
+  api, errMsg, type AdminAppointment, type AdminUser, type CalendarDay, type DeletionSummary, type Role, type Status,
   type Summary, type VehicleInput
 } from '../appApi'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
@@ -11,13 +11,22 @@ import VehicleManager from '../components/VehicleManager.vue'
 import { useAuth } from '../composables/useAuth'
 import { addMonths, dayNumber, fmtDate, fmtTime, monthLabel, monthOf, statusLabels, todayIso, weekdayMon } from '../format'
 
-const { user } = useAuth()
+const { user, isAdmin } = useAuth()
 const route = useRoute()
+
+const roleLabels: Record<Role, string> = { client: 'Cliente', manager: 'Gestor', admin: 'Administrador' }
+/** Solo el administrador ve y reparte roles; el gestor solo trabaja con clientes (la API también lo impone). */
+const roleFilter = ref<'all' | Role>('all')
+const shownUsers = computed(() => (roleFilter.value === 'all' ? users.value : users.value.filter((u) => u.role === roleFilter.value)))
+const usersTab = computed(() => (isAdmin.value ? 'Usuarios' : 'Clientes'))
+
+// Un enlace de un correo de aviso (?fecha=&cita=) abre su día; en cualquier otro caso se empieza por lo pendiente.
+const hasDeepLink = typeof route.query.fecha === 'string' || typeof route.query.cita === 'string'
 
 const tab = ref<'agenda' | 'users'>('agenda')
 const month = ref(monthOf(todayIso()))
 const date = ref(todayIso())
-const onlyPending = ref(false)
+const onlyPending = ref(!hasDeepLink)
 const calendar = ref<CalendarDay[]>([])
 const calBusy = ref(false)
 const items = ref<AdminAppointment[]>([])
@@ -187,7 +196,7 @@ async function confirmDelete(confirmEmail: string) {
 // ---- Ficha de cliente ----
 const dialog = ref<HTMLDialogElement | null>(null)
 const editing = ref<AdminUser | null>(null)
-const form = reactive({ name: '', email: '', phone: '', street: '', postalCode: '', city: '', province: '', role: 'client' as 'client' | 'admin' })
+const form = reactive({ name: '', email: '', phone: '', street: '', postalCode: '', city: '', province: '', role: 'client' as Role })
 const formBusy = ref(false)
 const formMsg = ref<{ ok: boolean; text: string } | null>(null)
 
@@ -207,7 +216,7 @@ function closeUser() {
 }
 
 /** Refleja en la tabla los cambios hechos en el diálogo, sin recargar toda la lista. */
-function syncUser(updated: { name: string; email: string; phone?: string | null; role: 'client' | 'admin'; address?: AdminUser['address']; vehicles: AdminUser['vehicles'] }) {
+function syncUser(updated: { name: string; email: string; phone?: string | null; role: Role; address?: AdminUser['address']; vehicles: AdminUser['vehicles'] }) {
   if (!editing.value) return
   Object.assign(editing.value, {
     name: updated.name, email: updated.email, phone: updated.phone,
@@ -223,7 +232,7 @@ async function saveUser() {
     const updated = await api.adminUpdateUser(editing.value.id, {
       name: form.name, email: form.email, phone: form.phone,
       address: { street: form.street, postalCode: form.postalCode, city: form.city, province: form.province },
-      role: form.role
+      ...(isAdmin.value ? { role: form.role } : {})
     })
     syncUser(updated)
     formMsg.value = { ok: true, text: 'Ficha guardada.' }
@@ -255,6 +264,9 @@ onMounted(async () => {
 
   await Promise.all([loadAgenda(), loadCalendar(), loadSummary()])
 
+  // Al entrar se enseñan las solicitudes por confirmar; si no hay ninguna, la agenda de hoy.
+  if (onlyPending.value && !items.value.length && !error.value) onlyPending.value = false
+
   if (highlightId.value) {
     await nextTick()
     document.getElementById(`appt-${highlightId.value}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -266,9 +278,12 @@ onMounted(async () => {
   <section class="page">
     <div class="lp-wrap">
       <header class="page-head enter">
-        <p class="eyebrow">Administración</p>
-        <h1 class="page-title">Agenda y clientes</h1>
-        <p class="lp-lead">Consulta la ocupación de un vistazo, confirma las solicitudes y gestiona las fichas de tus clientes.</p>
+        <p class="eyebrow">{{ isAdmin ? 'Administración' : 'Gestión' }}</p>
+        <h1 class="page-title">{{ isAdmin ? 'Agenda y usuarios' : 'Agenda y clientes' }}</h1>
+        <p class="lp-lead">
+          Consulta la ocupación de un vistazo, confirma las solicitudes y gestiona las fichas de
+          {{ isAdmin ? 'clientes, gestores y administradores' : 'tus clientes' }}.
+        </p>
       </header>
 
       <div class="stat-row enter" style="--i: 1">
@@ -282,7 +297,7 @@ onMounted(async () => {
           <Icon name="calendar" :size="16" />Agenda
         </button>
         <button type="button" role="tab" :aria-selected="tab === 'users'" :class="{ on: tab === 'users' }" @click="tab = 'users'">
-          <Icon name="users" :size="16" />Clientes
+          <Icon name="users" :size="16" />{{ usersTab }}
         </button>
       </div>
 
@@ -291,6 +306,11 @@ onMounted(async () => {
 
       <!-- Agenda -->
       <template v-if="tab === 'agenda'">
+        <p v-if="summary?.pending && !onlyPending" class="ok-note pending-banner" role="status">
+          Hay {{ summary.pending }} {{ summary.pending === 1 ? 'solicitud pendiente' : 'solicitudes pendientes' }} de confirmar.
+          <button type="button" class="mini solid" @click="onlyPending = true; highlightId = ''">Verlas</button>
+        </p>
+
         <div class="card cal-card enter" style="--i: 2">
           <div class="cal-head">
             <h2 class="cal-month">{{ monthLabel(month) }}</h2>
@@ -372,6 +392,14 @@ onMounted(async () => {
 
       <!-- Clientes -->
       <template v-else>
+        <label v-if="isAdmin" class="field role-filter">Mostrar
+          <select v-model="roleFilter">
+            <option value="all">Todos</option>
+            <option value="client">Clientes</option>
+            <option value="manager">Gestores</option>
+            <option value="admin">Administradores</option>
+          </select>
+        </label>
         <p v-if="loading" class="muted">Cargando…</p>
         <div v-else class="table-wrap card">
           <table>
@@ -379,7 +407,7 @@ onMounted(async () => {
               <tr><th>Nombre</th><th>Correo</th><th>Teléfono</th><th>Localidad</th><th class="num-col">Vehículos</th><th class="num-col">Citas</th><th>Rol</th><th>Acciones</th></tr>
             </thead>
             <tbody>
-              <tr v-for="u in users" :key="u.id" :class="{ off: !u.active }">
+              <tr v-for="u in shownUsers" :key="u.id" :class="{ off: !u.active }">
                 <td data-label="Nombre">{{ u.name }}</td>
                 <td data-label="Correo">{{ u.email }}</td>
                 <td data-label="Teléfono">{{ u.phone || '—' }}</td>
@@ -388,7 +416,7 @@ onMounted(async () => {
                 <td data-label="Citas" class="num-col">{{ u.appointments }}</td>
                 <td data-label="Rol">
                   <div class="act-row">
-                    <span :class="['pill', u.role === 'admin' ? 'confirmed' : 'completed']">{{ u.role === 'admin' ? 'Administrador' : 'Cliente' }}</span>
+                    <span :class="['pill', u.role === 'client' ? 'completed' : 'confirmed']">{{ roleLabels[u.role] }}</span>
                     <span v-if="!u.emailVerified" class="pill pending" title="Todavía no ha pulsado el enlace de confirmación">Sin confirmar</span>
                   </div>
                 </td>
@@ -451,9 +479,10 @@ onMounted(async () => {
                 <input v-model="form.province" type="text" maxlength="80" />
               </label>
             </div>
-            <label class="field">Rol
+            <label v-if="isAdmin" class="field">Rol
               <select v-model="form.role" :disabled="editing.id === user?.id">
                 <option value="client">Cliente</option>
+                <option value="manager">Gestor</option>
                 <option value="admin">Administrador</option>
               </select>
             </label>
@@ -467,7 +496,7 @@ onMounted(async () => {
         </div>
       </dialog>
 
-      <!-- Baja de una cuenta de cliente -->
+      <!-- Baja de una cuenta -->
       <ConfirmDialog :open="!!delUser" :title="`Eliminar la cuenta de ${delUser?.name ?? ''}`"
         :intro="`Se borrará definitivamente la cuenta de ${delUser?.email ?? ''} y todo lo que cuelga de ella:`"
         :items="delItems" require-label="Escribe el correo de la cuenta para confirmar"
