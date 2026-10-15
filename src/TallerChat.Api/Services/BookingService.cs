@@ -46,6 +46,9 @@ public sealed class BookingService(Db db, IOptions<BookingOptions> options)
 
     public DateOnly TodayLocal() => DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, tz));
 
+    /// <summary>Fecha y hora de un instante UTC en la zona del taller (para agrupar por mes, trimestre o año locales).</summary>
+    public DateTime ToLocal(DateTime utc) => TimeZoneInfo.ConvertTimeFromUtc(AsUtc(utc), tz);
+
     public (DateTime FromUtc, DateTime ToUtc) DayRangeUtc(DateOnly day) => (
         TimeZoneInfo.ConvertTimeToUtc(day.ToDateTime(TimeOnly.MinValue), tz),
         TimeZoneInfo.ConvertTimeToUtc(day.AddDays(1).ToDateTime(TimeOnly.MinValue), tz));

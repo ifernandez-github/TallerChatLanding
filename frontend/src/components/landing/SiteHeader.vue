@@ -16,7 +16,13 @@ const links = computed(() => [
   { to: '/servicios', label: 'Servicios' },
   { to: '/nosotros', label: 'Quiénes somos' },
   { to: '/contacto', label: 'Contacto' },
-  ...(isStaff.value ? [{ to: '/admin', label: user.value?.role === 'admin' ? 'Administración' : 'Gestión' }] : [])
+  ...(isStaff.value
+    ? [
+        { to: '/admin', label: user.value?.role === 'admin' ? 'Administración' : 'Gestión' },
+        { to: '/admin/estadisticas/clientes', label: 'Nuevos clientes' },
+        { to: '/admin/estadisticas/citas', label: 'Estadísticas' }
+      ]
+    : [])
 ])
 const account = computed(() => (user.value ? { to: '/mi-cuenta', label: 'Mis citas' } : { to: '/acceso', label: 'Acceder' }))
 
@@ -27,7 +33,7 @@ watch(() => route.fullPath, () => { menu.value = false })
 </script>
 
 <template>
-  <header :class="['lp-nav', { scrolled: scrolled || menu }]">
+  <header :class="['lp-nav', { scrolled: scrolled || menu, many: links.length > 4 }]">
     <div class="lp-wrap nav-in">
       <RouterLink to="/" class="brand">
         <span class="logo-mark"><Icon name="wrench" :size="20" /></span>
