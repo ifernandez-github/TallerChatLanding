@@ -106,6 +106,7 @@ app.MapAuthEndpoints();
 app.MapProfileEndpoints();
 app.MapAppointmentEndpoints();
 app.MapAdminEndpoints();
+app.MapStatsEndpoints();
 // El SPA responde a cualquier ruta MENOS /api/*: así una ruta de API inexistente devuelve 404 y no HTML.
 app.MapFallbackToFile("{*path:regex(^(?!api/).*$)}", "index.html");
 

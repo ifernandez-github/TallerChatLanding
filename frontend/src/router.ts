@@ -19,6 +19,8 @@ export const router = createRouter({
     { path: '/verificar', component: () => import('./views/VerifyEmailView.vue'), meta: { title: 'Confirmar cuenta' } },
     { path: '/restablecer', component: () => import('./views/ResetPasswordView.vue'), meta: { title: 'Nueva contraseña' } },
     { path: '/mi-cuenta', component: () => import('./views/AccountView.vue'), meta: { title: 'Mis citas', auth: true } },
+    { path: '/admin/estadisticas/clientes', component: () => import('./views/StatsClientsView.vue'), meta: { title: 'Nuevos clientes', auth: true, staff: true } },
+    { path: '/admin/estadisticas/citas', component: () => import('./views/StatsAppointmentsView.vue'), meta: { title: 'Estadísticas de citas', auth: true, staff: true } },
     { path: '/admin', component: () => import('./views/AdminView.vue'), meta: { title: 'Administración', auth: true, staff: true } },
     { path: '/:pathMatch(.*)*', component: () => import('./views/NotFoundView.vue'), meta: { title: 'Página no encontrada' } }
   ],
