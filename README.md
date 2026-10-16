@@ -111,6 +111,12 @@ Abre http://localhost:5173 (Vite redirige `/api` a la API).
   completar. Al entrar muestra primero las solicitudes pendientes de confirmar. Segunda pestaña con la ficha completa
   de cada usuario (datos, dirección, rol y sus vehículos), activar/desactivar cuentas y eliminarlas. Requiere sesión
   de administrador o de gestor (el gestor solo ve y gestiona clientes; ver "Roles").
+- `/admin/estadisticas/clientes` — **Nuevos clientes**: gráfica interactiva de altas por mes, trimestre o año (barras, línea con área o circular).
+  Gestor y administrador.
+- `/admin/estadisticas/citas` — **Estadísticas de citas**: citas creadas, pendientes, confirmadas, cerradas (completadas) y canceladas, con filtro por
+  categoría de servicio y gráfica de barras, apiladas, línea o circular. Las citas se agrupan por el periodo en que se crearon y cuentan con su
+  estado actual. Los datos salen de `GET /api/admin/stats/clients` y `/api/admin/stats/appointments` (`?granularity=month|quarter|year&periods=N&category=<id>`),
+  protegidos con la política `staff`.
 
 **Personalizar (todo en `frontend/src/content/site.ts`, son datos de ejemplo):** nombre y marca (`brand`), textos,
 servicios, estadísticas, teléfono, email, horario y dirección. La ubicación del mapa sale de `address.lat` y
@@ -341,6 +347,7 @@ docker run -p 8080:8080 -e Mongo__ConnectionString=... -e Gemini__ApiKey=... tal
 | Datos del taller en los correos | `Shop:*` en `appsettings.json` |
 | URL base de los enlaces de los correos | `Shop:PublicBaseUrl` (en Render, `Shop__PublicBaseUrl`) |
 | Quién puede hacer qué (roles Cliente / Gestor / Administrador) | `Roles` en `Data/Entities.cs` y `AdminEndpoints` |
+| Estadísticas (agrupación por mes/trimestre/año, gráficas) | `Services/StatsBuckets.cs`, `Endpoints/StatsEndpoints.cs` y `frontend/src/components/StatsChart.vue` |
 | Catálogo de servicios reservables | `Services/Catalog.cs` (ids deben coincidir con `site.ts`) |
 | Textos de cada página de servicio | `services` en `frontend/src/content/site.ts` |
 | Máximo de vehículos por cliente (10) | `ProfileEndpoints.MaxVehicles` |

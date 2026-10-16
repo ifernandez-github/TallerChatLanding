@@ -5,5 +5,6 @@ import './style.css'
 import './chat.css'
 import './landing.css'
 import './app.css'
+import './stats.css'
 
 createApp(App).use(router).mount('#app')

@@ -130,3 +130,6 @@ App web de un taller: landing, chatbot sobre la base de conocimiento, gestión d
   no aparezca como libre; la disponibilidad de reserva usa `Statuses.Active`.
 - `MapFallbackToFile` está limitado a las rutas que NO empiezan por `api/`: una ruta de API inexistente debe devolver
   404, nunca el HTML del SPA.
+- Las estadísticas (`/api/admin/stats/*`, grupo `staff`) son solo lectura y devuelven datos agregados, nunca nombres ni correos. Agrupan por el
+  mes, trimestre o año LOCAL del taller (`BookingService.ToLocal` + `StatsBuckets`), no por UTC, y devuelven siempre los tramos vacíos a cero.
+  Las citas se cuentan por `created_at` con su estado actual. Las gráficas son SVG propios (`StatsChart.vue`): sin librerías y con colores `--st-*` de `stats.css`.

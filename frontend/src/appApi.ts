@@ -45,6 +45,14 @@ export interface AdminUser {
 export interface AdminUserInput { name: string; email: string; phone: string; address: Address; role?: Role }
 export interface Summary { pending: number; today: number; users: number }
 
+export type Granularity = 'month' | 'quarter' | 'year'
+export interface ClientsStats { granularity: Granularity; total: number; points: { key: string; label: string; count: number }[] }
+export interface AppointmentsPoint { key: string; label: string; created: number; pending: number; confirmed: number; closed: number; cancelled: number }
+export interface AppointmentsStats {
+  granularity: Granularity; category: string | null; categories: { id: string; name: string }[]
+  totals: Omit<AppointmentsPoint, 'key' | 'label'>; points: AppointmentsPoint[]
+}
+
 /** Lo que desaparece al borrar una cuenta. Se consulta antes de confirmar, para poder avisar con números reales. */
 export interface DeletionSummary { vehicles: number; appointments: number; upcoming: number }
 
@@ -128,6 +136,11 @@ export const api = {
   adminDeletionPreview: (id: string) => call<DeletionSummary>('GET', `/api/admin/users/${id}/deletion`),
   adminDeleteUser: (id: string, confirmEmail: string) =>
     call<DeletionSummary>('POST', `/api/admin/users/${id}/delete`, { confirmEmail }),
+  // Estadísticas (administrador y gestor)
+  statsClients: (granularity: Granularity, periods: number) =>
+    call<ClientsStats>('GET', `/api/admin/stats/clients?granularity=${granularity}&periods=${periods}`),
+  statsAppointments: (granularity: Granularity, periods: number, category: string) =>
+    call<AppointmentsStats>('GET', `/api/admin/stats/appointments?granularity=${granularity}&periods=${periods}${category ? `&category=${encodeURIComponent(category)}` : ''}`),
   adminAddVehicle: (userId: string, v: VehicleInput) => call<User>('POST', `/api/admin/users/${userId}/vehicles`, v),
   adminUpdateVehicle: (userId: string, id: string, v: VehicleInput) => call<User>('PUT', `/api/admin/users/${userId}/vehicles/${id}`, v),
   adminDeleteVehicle: (userId: string, id: string) => call<User>('DELETE', `/api/admin/users/${userId}/vehicles/${id}`)

@@ -71,3 +71,13 @@ public static class Mappers
         new(u.Id, u.Name, u.Email, u.Phone, u.Role, u.Active, u.EmailVerified, u.CreatedAt, appointments,
             u.Address.ToDto(), u.Vehicles.Select(v => v.ToDto()).ToList());
 }
+
+// ---------- Estadísticas ----------
+public sealed record ClientsPointDto(string Key, string Label, int Count);
+public sealed record ClientsStatsDto(string Granularity, int Total, List<ClientsPointDto> Points);
+
+public sealed record AppointmentsPointDto(string Key, string Label, int Created, int Pending, int Confirmed, int Closed, int Cancelled);
+public sealed record AppointmentsTotalsDto(int Created, int Pending, int Confirmed, int Closed, int Cancelled);
+public sealed record CategoryDto(string Id, string Name);
+public sealed record AppointmentsStatsDto(string Granularity, string? Category, List<CategoryDto> Categories,
+    AppointmentsTotalsDto Totals, List<AppointmentsPointDto> Points);
