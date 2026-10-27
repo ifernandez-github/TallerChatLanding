@@ -20,6 +20,7 @@
 }
 
 * { box-sizing: border-box; }
+html, body { overflow-x: clip; }
 body {
   margin: 0; color: var(--ink); font: 16px/1.6 var(--font); -webkit-font-smoothing: antialiased;
   background: var(--bg); text-rendering: optimizeLegibility;
