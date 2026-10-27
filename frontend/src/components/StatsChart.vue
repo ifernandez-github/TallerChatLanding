@@ -102,6 +102,8 @@ const lines = computed(() => props.type !== 'line' ? [] : props.series.map((s, j
 // ---------- Circular ----------
 const R_DONUT = 108, SW = 46, CX = W / 2, CY = H / 2
 const C = 2 * Math.PI * R_DONUT
+// El circular se recorta a un cuadrado centrado para que se vea grande y centrado también en el móvil.
+const viewBox = computed(() => props.type === 'pie' ? `${CX - 190} 0 380 ${H}` : `0 0 ${W} ${H}`)
 interface Slice { key: string; label: string; value: number; color: string; len: number; rest: number; off: number; d: number; pct: number }
 const slices = computed<Slice[]>(() => {
   if (props.type !== 'pie') return []
@@ -139,8 +141,8 @@ const typeName = computed(() => ({ bar: 'barras', stacked: 'barras apiladas', li
 </script>
 
 <template>
-  <div class="chart" :class="{ hovering: hover !== null || hoverSlice !== null }">
-    <svg :viewBox="`0 0 ${W} ${H}`" role="img" :aria-label="summary" preserveAspectRatio="xMidYMid meet">
+  <div class="chart" :class="{ hovering: hover !== null || hoverSlice !== null, pie: type === 'pie' }">
+    <svg :viewBox="viewBox" role="img" :aria-label="summary" preserveAspectRatio="xMidYMid meet">
       <defs>
         <linearGradient v-for="s in series" :key="s.key" :id="`${uid}-bar-${s.key}`" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" :style="{ stopColor: s.color }" stop-opacity="1" />

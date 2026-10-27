@@ -97,7 +97,7 @@ const animKey = computed(() => `${type.value}-${version.value}`)
         </div>
 
         <p v-if="error" class="form-error" role="alert">{{ error }}</p>
-        <div class="chart-wrap" :class="{ busy: loading }" :aria-busy="loading">
+        <div class="chart-wrap" :class="{ busy: loading, 'is-pie': type === 'pie' }" :aria-busy="loading">
           <StatsChart v-if="data" :labels="labels" :series="series" :type="type" :anim-key="animKey" unit="clientes nuevos" />
           <div v-else-if="loading" class="chart-skeleton" aria-hidden="true" />
         </div>

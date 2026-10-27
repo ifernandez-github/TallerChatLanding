@@ -95,13 +95,17 @@
 
 @media (max-width: 640px) {
   .stats-controls .push { margin-left: 0; }
-  .segmented { max-width: 100%; overflow-x: auto; }
-  .segmented button { padding: 8px 10px; }
-  .segmented button span { font-size: .84rem; }
+  /* Los selectores ocupan todo el ancho y reparten sus botones: sin desbordes ni píldora descolocada. */
+  .stats-controls > * { max-width: 100%; min-width: 0; }
+  .segmented { display: grid; width: 100%; }
+  .segmented button { flex-direction: column; gap: 2px; min-width: 0; padding: 7px 2px; }
+  .segmented button span { font-size: .76rem; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .stats-select, .stats-select select { width: 100%; }
   .chart .center-n { font-size: 34px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .chart-wrap::after { animation: none !important; }
   .chart *, .chart-skeleton, .stats-nav a, .segmented .seg-pill, .stat.kpi { animation: none !important; transition: none !important; }
   .chart .line { stroke-dashoffset: 0; }
 }
@@ -123,6 +127,13 @@
   .stat.kpi strong { font-size: 1.5rem; }
   .stats-card { padding: 16px 14px; }
   /* En el móvil la gráfica mantiene un tamaño legible y se desplaza en horizontal. */
-  .chart-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .chart-wrap { overflow-x: auto; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; scrollbar-width: thin; }
   .chart { min-width: 560px; }
+  /* Aviso animado de que el contenido se desliza dentro de la gráfica (no la pantalla). */
+  .chart-wrap:not(.is-pie)::after { content: "Desliza ↔"; position: sticky; left: 0; display: block; width: max-content; margin: 4px auto 0; padding: 3px 12px; border-radius: 999px; background: var(--surface-2); border: 1px solid var(--line); color: var(--muted); font-size: .76rem; font-weight: 600; animation: swipe-hint 1.6s ease-in-out 3; pointer-events: none; }
+  /* El circular no necesita desplazamiento: se centra. */
+  .chart-wrap.is-pie { overflow-x: hidden; }
+  .chart-wrap.is-pie .chart { min-width: 0; }
 }
+.chart.pie svg { max-width: 420px; margin: 0 auto; }
+@keyframes swipe-hint { 0%, 100% { transform: translateX(0); opacity: 1; } 50% { transform: translateX(10px); opacity: .6; } }
