@@ -7,6 +7,7 @@ import {
 } from '../appApi'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import Icon from '../components/Icon.vue'
+import UserAppointments from '../components/UserAppointments.vue'
 import VehicleManager from '../components/VehicleManager.vue'
 import { useAuth } from '../composables/useAuth'
 import { addMonths, dayNumber, fmtDate, fmtTime, monthLabel, monthOf, statusLabels, todayIso, weekdayMon } from '../format'
@@ -247,6 +248,42 @@ const addVehicle = async (v: VehicleInput) => syncUser(await api.adminAddVehicle
 const updateVehicle = async (id: string, v: VehicleInput) => syncUser(await api.adminUpdateVehicle(editing.value!.id, id, v))
 const removeVehicle = async (id: string) => syncUser(await api.adminDeleteVehicle(editing.value!.id, id))
 
+// ---- Alta de una cuenta (queda confirmada: sin correo de verificación) ----
+const createDialog = ref<HTMLDialogElement | null>(null)
+const createForm = reactive({ name: '', email: '', phone: '', password: '', role: 'client' as Role })
+const createBusy = ref(false)
+const createError = ref('')
+
+function openCreate() {
+  Object.assign(createForm, { name: '', email: '', phone: '', password: '', role: 'client' as Role })
+  createError.value = ''
+  createDialog.value?.showModal()
+}
+
+async function createUser() {
+  createBusy.value = true
+  createError.value = ''
+  try {
+    const created = await api.adminCreateUser({
+      name: createForm.name, email: createForm.email, phone: createForm.phone, password: createForm.password,
+      ...(isAdmin.value ? { role: createForm.role } : {})
+    })
+    users.value = [...users.value, created].sort((a, b) => a.name.localeCompare(b.name, 'es'))
+    createDialog.value?.close()
+    notice.value = `La cuenta de ${created.name} está creada y confirmada. Ya puede entrar con su correo y la contraseña que has puesto.`
+    loadSummary()
+  } catch (e) {
+    createError.value = errMsg(e)
+  } finally {
+    createBusy.value = false
+  }
+}
+
+async function refreshAfterAppointment() {
+  if (editing.value) editing.value.appointments = (await api.adminUserAppointments(editing.value.id)).length
+  await Promise.all([loadSummary(), loadCalendar()])
+}
+
 watch(month, loadCalendar)
 watch([date, onlyPending], loadAgenda)
 watch(tab, (t) => { notice.value = ''; if (t === 'users') loadUsers(); else { loadAgenda(); loadCalendar() } })
@@ -392,14 +429,17 @@ onMounted(async () => {
 
       <!-- Clientes -->
       <template v-else>
-        <label v-if="isAdmin" class="field role-filter">Mostrar
-          <select v-model="roleFilter">
-            <option value="all">Todos</option>
-            <option value="client">Clientes</option>
-            <option value="manager">Gestores</option>
-            <option value="admin">Administradores</option>
-          </select>
-        </label>
+        <div class="toolbar">
+          <label v-if="isAdmin" class="field role-filter">Mostrar
+            <select v-model="roleFilter">
+              <option value="all">Todos</option>
+              <option value="client">Clientes</option>
+              <option value="manager">Gestores</option>
+              <option value="admin">Administradores</option>
+            </select>
+          </label>
+          <button type="button" class="mini solid" @click="openCreate"><Icon name="user" :size="14" />Nuevo {{ isAdmin ? 'usuario' : 'cliente' }}</button>
+        </div>
         <p v-if="loading" class="muted">Cargando…</p>
         <div v-else class="table-wrap card">
           <table>
@@ -493,7 +533,42 @@ onMounted(async () => {
 
           <VehicleManager :vehicles="editing.vehicles" :max="10"
             :add="addVehicle" :update="updateVehicle" :remove="removeVehicle" />
+
+          <UserAppointments :user-id="editing.id" :vehicles="editing.vehicles" @changed="refreshAfterAppointment" />
         </div>
+      </dialog>
+
+      <!-- Nueva cuenta -->
+      <dialog ref="createDialog" class="sheet" @cancel.prevent="createDialog?.close()">
+        <form @submit.prevent="createUser">
+          <div class="sheet-head">
+            <h2>Nuevo {{ isAdmin ? 'usuario' : 'cliente' }}</h2>
+            <button type="button" class="icon-btn" aria-label="Cerrar" @click="createDialog?.close()"><Icon name="close" /></button>
+          </div>
+          <p class="muted">La cuenta se crea ya confirmada: no se envía ningún correo de verificación.</p>
+          <label class="field">Nombre
+            <input v-model="createForm.name" type="text" maxlength="80" required />
+          </label>
+          <label class="field">Correo electrónico
+            <input v-model="createForm.email" type="email" maxlength="254" required />
+          </label>
+          <label class="field">Teléfono
+            <input v-model="createForm.phone" type="tel" maxlength="20" />
+          </label>
+          <label class="field">Contraseña inicial
+            <input v-model="createForm.password" type="text" autocomplete="off" minlength="10" maxlength="100" required />
+            <small class="muted">Mínimo 10 caracteres, con letras y números. Díctasela al cliente para que la cambie.</small>
+          </label>
+          <label v-if="isAdmin" class="field">Rol
+            <select v-model="createForm.role">
+              <option value="client">Cliente</option>
+              <option value="manager">Gestor</option>
+              <option value="admin">Administrador</option>
+            </select>
+          </label>
+          <p v-if="createError" class="form-error" role="alert">{{ createError }}</p>
+          <button class="primary" type="submit" :disabled="createBusy">{{ createBusy ? 'Creando…' : 'Crear cuenta' }}</button>
+        </form>
       </dialog>
 
       <!-- Baja de una cuenta -->

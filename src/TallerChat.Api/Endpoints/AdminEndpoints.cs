@@ -24,6 +24,9 @@ public static class AdminEndpoints
         g.MapGet("/appointments", AppointmentsAsync);
         g.MapPost("/appointments/{id}/status", SetStatusAsync);
         g.MapGet("/users", UsersAsync);
+        g.MapPost("/users", CreateUserAsync);
+        g.MapGet("/users/{id}/appointments", UserAppointmentsAsync);
+        g.MapPost("/users/{id}/appointments", BookForUserAsync).RequireRateLimiting("booking");
         g.MapPut("/users/{id}", UpdateUserAsync);
         g.MapPost("/users/{id}/active", SetActiveAsync);
         g.MapGet("/users/{id}/deletion", DeletionPreviewAsync).RequireRateLimiting("account");
@@ -140,6 +143,58 @@ public static class AdminEndpoints
             .ToListAsync(ct);
         var byUser = counts.ToDictionary(c => c.UserId, c => c.Count);
         return Results.Ok(users.Select(u => u.ToAdminDto(byUser.GetValueOrDefault(u.Id))));
+    }
+
+    /// <summary>
+    /// Alta de una cuenta por el personal. La cuenta nace activa y con el correo ya confirmado: quien la crea
+    /// responde de que la dirección es correcta, así que no hay enlace de verificación. El gestor solo crea clientes.
+    /// </summary>
+    private static async Task<IResult> CreateUserAsync(AdminCreateUserRequest req, ClaimsPrincipal principal, Db db, CancellationToken ct)
+    {
+        var role = string.IsNullOrWhiteSpace(req.Role) ? Roles.Client : req.Role;
+        if (!Roles.All.Contains(role)) return ApiResults.Error(400, "El rol no es válido.");
+        if (!Roles.CanManage(principal.FindFirstValue(ClaimTypes.Role), role))
+            return ApiResults.Error(403, "Tu rol de gestor solo permite crear cuentas de cliente.");
+
+        if (!Validation.TryName(req.Name, out var name)) return ApiResults.Error(400, "Escribe el nombre (entre 2 y 80 caracteres).");
+        if (!Validation.TryEmail(req.Email, out var email)) return ApiResults.Error(400, "Introduce un correo electrónico válido.");
+        if (!Notifier.Deliverable(email)) return ApiResults.Error(400, "Ese dominio está reservado para los datos de ejemplo. Usa otra dirección.");
+        if (!Validation.TryPhone(req.Phone, out var phone)) return ApiResults.Error(400, "El teléfono no es válido.");
+        if (!Validation.TryAddress(req.Address, out var address, out var problem)) return ApiResults.Error(400, problem);
+        if (!Validation.StrongPassword(req.Password))
+            return ApiResults.Error(400, "La contraseña debe tener al menos 10 caracteres, con letras y números.");
+
+        var user = new AppUser
+        {
+            Name = name, Email = email, Phone = phone, Address = address, Role = role,
+            PasswordHash = PasswordHasher.Hash(req.Password!),
+            EmailVerified = true,
+            SecurityStamp = Guid.NewGuid().ToString("N")
+        };
+        try { await db.Users.InsertOneAsync(user, cancellationToken: ct); }
+        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+        {
+            return ApiResults.Error(409, "Ya existe una cuenta con ese correo.");
+        }
+        return Results.Json(user.ToAdminDto(0), statusCode: 201);
+    }
+
+    /// <summary>Todas las citas de una cuenta (también las pasadas y canceladas), la más reciente primero.</summary>
+    private static async Task<IResult> UserAppointmentsAsync(string id, ClaimsPrincipal principal, Db db, CancellationToken ct)
+    {
+        if (await GuardTargetAsync(id, principal, db, ct) is { } denied) return denied;
+        var list = await db.Appointments.Find(a => a.UserId == id).SortByDescending(a => a.Start).Limit(200).ToListAsync(ct);
+        return Results.Ok(list.Select(AppointmentEndpoints.ToDto));
+    }
+
+    /// <summary>Reserva una cita en nombre de un cliente (por ejemplo, cuando llama o viene al taller).</summary>
+    private static async Task<IResult> BookForUserAsync(string id, BookRequest req, ClaimsPrincipal principal, Db db,
+        BookingService booking, Notifier notifier, CancellationToken ct)
+    {
+        if (await GuardTargetAsync(id, principal, db, ct) is { } denied) return denied;
+        var user = await db.Users.Find(u => u.Id == id).FirstOrDefaultAsync(ct);
+        if (user is not { Active: true }) return ApiResults.Error(409, "La cuenta está desactivada: reactívala para darle cita.");
+        return await AppointmentEndpoints.BookForAsync(user, req, true, db, booking, notifier, ct);
     }
 
     /// <summary>Edita cualquier dato de la ficha de un cliente. Un administrador no puede quitarse a sí mismo el rol.</summary>

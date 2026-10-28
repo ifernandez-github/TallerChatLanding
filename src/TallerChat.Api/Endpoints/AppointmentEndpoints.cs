@@ -48,15 +48,26 @@ public static class AppointmentEndpoints
     private static async Task<IResult> BookAsync(BookRequest req, ClaimsPrincipal principal, Db db, BookingService booking,
         Notifier notifier, CancellationToken ct)
     {
+        var uid = principal.UserId();
+        var user = await db.Users.Find(u => u.Id == uid).FirstOrDefaultAsync(ct);
+        if (user is not { Active: true }) return ApiResults.Error(401, "Sesión no válida.");
+        return await BookForAsync(user, req, false, db, booking, notifier, ct);
+    }
+
+    /// <summary>
+    /// Reserva una cita a nombre de <paramref name="user"/>. La usa el propio cliente y, con
+    /// <paramref name="byStaff"/>, el personal del taller en nombre de un cliente (en ese caso
+    /// no se avisa a los administradores de una solicitud que ha hecho el propio taller).
+    /// </summary>
+    public static async Task<IResult> BookForAsync(AppUser user, BookRequest req, bool byStaff, Db db, BookingService booking,
+        Notifier notifier, CancellationToken ct)
+    {
         if (Catalog.Find(req.ServiceId) is not { } service) return ApiResults.Error(400, "Elige un servicio de la lista.");
         if (req.Start is not { } start) return ApiResults.Error(400, "Elige día y hora.");
         var notes = string.IsNullOrWhiteSpace(req.Notes) ? null : req.Notes.Trim();
         if (notes is { Length: > 500 }) return ApiResults.Error(400, "Las notas no pueden superar los 500 caracteres.");
 
-        var uid = principal.UserId();
-        var user = await db.Users.Find(u => u.Id == uid).FirstOrDefaultAsync(ct);
-        if (user is not { Active: true }) return ApiResults.Error(401, "Sesión no válida.");
-
+        var uid = user.Id;
         string plate, vehicleName;
         string? vehicleId = null;
         var saveVehicle = false;
@@ -65,7 +76,7 @@ public static class AppointmentEndpoints
         {
             // Vehículo ya guardado en la ficha del cliente.
             var saved = user.Vehicles.FirstOrDefault(v => v.Id == req.VehicleId);
-            if (saved is null) return ApiResults.Error(400, "Ese vehículo ya no está en tu ficha. Elige otro.");
+            if (saved is null) return ApiResults.Error(400, byStaff ? "Ese vehículo no está en la ficha del cliente." : "Ese vehículo ya no está en tu ficha. Elige otro.");
             vehicleId = saved.Id;
             plate = saved.Plate;
             vehicleName = saved.Describe();
@@ -95,7 +106,7 @@ public static class AppointmentEndpoints
 
         // Con CancellationToken.None: si el cliente cierra la pestaña, los correos salen igualmente.
         var sent = await notifier.TrySendAsync(user, result.Appointment, EmailKind.Requested, CancellationToken.None);
-        await notifier.NotifyAdminsAsync(EmailKind.Requested, user, result.Appointment, CancellationToken.None);
+        if (!byStaff) await notifier.NotifyAdminsAsync(EmailKind.Requested, user, result.Appointment, CancellationToken.None);
         return Results.Json(new BookResponse(ToDto(result.Appointment), sent), statusCode: 201);
     }
 

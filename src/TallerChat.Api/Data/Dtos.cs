@@ -13,6 +13,8 @@ public sealed record ResetRequest(string? Token, string? Password);
 public sealed record RegisterResponse(bool Registered, bool EmailSent, bool SignedIn, string Email);
 public sealed record ProfileRequest(string? Name, string? Phone, AddressDto? Address);
 public sealed record VehicleRequest(string? Make, string? Model, string? Plate, int? Year, int? Km, string? Fuel, string? Vin);
+/// <summary>Alta de una cuenta por el personal: queda confirmada y activa, sin correo de verificación.</summary>
+public sealed record AdminCreateUserRequest(string? Name, string? Email, string? Phone, string? Password, AddressDto? Address, string? Role);
 public sealed record AdminUserRequest(string? Name, string? Email, string? Phone, AddressDto? Address, string? Role);
 
 // ---------- Baja de cuenta ----------

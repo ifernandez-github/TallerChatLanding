@@ -43,6 +43,10 @@ export interface AdminUser {
   address?: Address | null; vehicles: Vehicle[]
 }
 export interface AdminUserInput { name: string; email: string; phone: string; address: Address; role?: Role }
+export interface AdminCreateUserInput {
+  name: string; email: string; phone: string; password: string; role?: Role; address?: Address
+}
+export interface ServiceInfo { id: string; name: string }
 export interface Summary { pending: number; today: number; users: number }
 
 export type Granularity = 'month' | 'quarter' | 'year'
@@ -131,6 +135,10 @@ export const api = {
     call<AdminAppointment[]>('GET', q.pending ? '/api/admin/appointments?pending=true' : `/api/admin/appointments?date=${q.date}`),
   adminSetStatus: (id: string, status: Status) => call<BookResponse>('POST', `/api/admin/appointments/${id}/status`, { status }),
   adminUsers: () => call<AdminUser[]>('GET', '/api/admin/users'),
+  adminCreateUser: (input: AdminCreateUserInput) => call<AdminUser>('POST', '/api/admin/users', input),
+  adminUserAppointments: (userId: string) => call<Appointment[]>('GET', `/api/admin/users/${userId}/appointments`),
+  adminBookForUser: (userId: string, input: BookInput) => call<BookResponse>('POST', `/api/admin/users/${userId}/appointments`, input),
+  services: () => call<ServiceInfo[]>('GET', '/api/appointments/services'),
   adminUpdateUser: (id: string, input: AdminUserInput) => call<User>('PUT', `/api/admin/users/${id}`, input),
   adminSetActive: (id: string, active: boolean) => call<{ id: string; active: boolean }>('POST', `/api/admin/users/${id}/active`, { active }),
   adminDeletionPreview: (id: string) => call<DeletionSummary>('GET', `/api/admin/users/${id}/deletion`),
