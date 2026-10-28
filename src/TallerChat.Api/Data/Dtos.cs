@@ -15,7 +15,12 @@ public sealed record ProfileRequest(string? Name, string? Phone, AddressDto? Add
 public sealed record VehicleRequest(string? Make, string? Model, string? Plate, int? Year, int? Km, string? Fuel, string? Vin);
 /// <summary>Alta de una cuenta por el personal: queda confirmada y activa, sin correo de verificación.</summary>
 public sealed record AdminCreateUserRequest(string? Name, string? Email, string? Phone, string? Password, AddressDto? Address, string? Role);
-public sealed record AdminCreateUserResponse(AdminUserDto User, bool EmailSent);
+/// <summary>La ficha creada con los mismos campos que en el listado, más si salió el email de bienvenida.</summary>
+public sealed record AdminCreatedUserDto : AdminUserDto
+{
+    public AdminCreatedUserDto(AdminUserDto user, bool emailSent) : base(user) => EmailSent = emailSent;
+    public bool EmailSent { get; }
+}
 public sealed record ChangePasswordRequest(string? CurrentPassword, string? NewPassword);
 public sealed record AdminUserRequest(string? Name, string? Email, string? Phone, AddressDto? Address, string? Role);
 
@@ -46,7 +51,7 @@ public sealed record StatusRequest(string? Status);
 public sealed record ActiveRequest(bool? Active);
 public sealed record AdminAppointmentDto(string Id, string UserId, string UserName, string UserEmail, string? UserPhone,
     string ServiceId, string ServiceName, DateTime Start, int Bay, string Plate, string Vehicle, string? Notes, string Status);
-public sealed record AdminUserDto(string Id, string Name, string Email, string? Phone, string Role, bool Active,
+public record AdminUserDto(string Id, string Name, string Email, string? Phone, string Role, bool Active,
     bool EmailVerified, DateTime CreatedAt, int Appointments, AddressDto? Address, List<VehicleDto> Vehicles);
 public sealed record SummaryDto(int Pending, int Today, int Users);
 

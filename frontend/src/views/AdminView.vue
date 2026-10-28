@@ -264,14 +264,14 @@ async function createUser() {
   createBusy.value = true
   createError.value = ''
   try {
-    const { user: created, emailSent } = await api.adminCreateUser({
+    const created = await api.adminCreateUser({
       name: createForm.name, email: createForm.email, phone: createForm.phone, password: createForm.password,
       ...(isAdmin.value ? { role: createForm.role } : {})
     })
     users.value = [...users.value, created].sort((a, b) => a.name.localeCompare(b.name, 'es'))
     createDialog.value?.close()
     notice.value = `La cuenta de ${created.name} está creada y confirmada. ` +
-      (emailSent ? 'Se le ha enviado un email de bienvenida con un enlace para elegir su contraseña. ' : 'No se pudo enviar el email de bienvenida (SMTP no configurado o dirección de ejemplo). ') +
+      (created.emailSent ? 'Se le ha enviado un email de bienvenida con un enlace para elegir su contraseña. ' : 'No se pudo enviar el email de bienvenida (SMTP no configurado o dirección de ejemplo). ') +
       'Si entra con la contraseña que has puesto, tendrá que cambiarla en el primer acceso.'
     loadSummary()
   } catch (e) {

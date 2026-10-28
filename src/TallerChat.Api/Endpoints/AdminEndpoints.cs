@@ -183,7 +183,7 @@ public static class AdminEndpoints
         // Bienvenida con enlace para elegir contraseña. Con CancellationToken.None: sale aunque se cierre la pestaña.
         var raw = await tokens.IssueAsync(user.Id, TokenKinds.Reset, CancellationToken.None, welcome: true);
         var sent = await notifier.TrySendWelcomeAsync(user, TokenService.Link(shop.Value, "/restablecer", raw), CancellationToken.None);
-        return Results.Json(new AdminCreateUserResponse(user.ToAdminDto(0), sent), statusCode: 201);
+        return Results.Json(new AdminCreatedUserDto(user.ToAdminDto(0), sent), statusCode: 201);
     }
 
     /// <summary>Todas las citas de una cuenta (también las pasadas y canceladas), la más reciente primero.</summary>

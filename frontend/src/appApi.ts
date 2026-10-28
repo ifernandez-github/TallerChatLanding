@@ -48,7 +48,7 @@ export interface AdminUserInput { name: string; email: string; phone: string; ad
 export interface AdminCreateUserInput {
   name: string; email: string; phone: string; password: string; role?: Role; address?: Address
 }
-export interface AdminCreateUserResult { user: AdminUser; emailSent: boolean }
+export type AdminCreateUserResult = AdminUser & { emailSent: boolean }
 export interface ServiceInfo { id: string; name: string }
 export interface Summary { pending: number; today: number; users: number }
 
