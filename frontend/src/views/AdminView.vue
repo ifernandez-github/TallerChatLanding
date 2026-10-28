@@ -264,13 +264,15 @@ async function createUser() {
   createBusy.value = true
   createError.value = ''
   try {
-    const created = await api.adminCreateUser({
+    const { user: created, emailSent } = await api.adminCreateUser({
       name: createForm.name, email: createForm.email, phone: createForm.phone, password: createForm.password,
       ...(isAdmin.value ? { role: createForm.role } : {})
     })
     users.value = [...users.value, created].sort((a, b) => a.name.localeCompare(b.name, 'es'))
     createDialog.value?.close()
-    notice.value = `La cuenta de ${created.name} está creada y confirmada. Ya puede entrar con su correo y la contraseña que has puesto.`
+    notice.value = `La cuenta de ${created.name} está creada y confirmada. ` +
+      (emailSent ? 'Se le ha enviado un email de bienvenida con un enlace para elegir su contraseña. ' : 'No se pudo enviar el email de bienvenida (SMTP no configurado o dirección de ejemplo). ') +
+      'Si entra con la contraseña que has puesto, tendrá que cambiarla en el primer acceso.'
     loadSummary()
   } catch (e) {
     createError.value = errMsg(e)
@@ -545,7 +547,7 @@ onMounted(async () => {
             <h2>Nuevo {{ isAdmin ? 'usuario' : 'cliente' }}</h2>
             <button type="button" class="icon-btn" aria-label="Cerrar" @click="createDialog?.close()"><Icon name="close" /></button>
           </div>
-          <p class="muted">La cuenta se crea ya confirmada: no se envía ningún correo de verificación.</p>
+          <p class="muted">La cuenta se crea ya confirmada, sin correo de verificación. Recibirá un email de bienvenida con un enlace para elegir su contraseña, y si entra con la provisional tendrá que cambiarla.</p>
           <label class="field">Nombre
             <input v-model="createForm.name" type="text" maxlength="80" required />
           </label>
@@ -557,7 +559,7 @@ onMounted(async () => {
           </label>
           <label class="field">Contraseña inicial
             <input v-model="createForm.password" type="text" autocomplete="off" minlength="10" maxlength="100" required />
-            <small class="muted">Mínimo 10 caracteres, con letras y números. Díctasela al cliente para que la cambie.</small>
+            <small class="muted">Mínimo 10 caracteres, con letras y números. Díctasela al cliente: se le obligará a cambiarla al entrar.</small>
           </label>
           <label v-if="isAdmin" class="field">Rol
             <select v-model="createForm.role">

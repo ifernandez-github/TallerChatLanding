@@ -17,6 +17,7 @@ export const router = createRouter({
     { path: '/cita', component: () => import('./views/BookingView.vue'), meta: { title: 'Pedir cita' } },
     { path: '/acceso', component: () => import('./views/LoginView.vue'), meta: { title: 'Acceso' } },
     { path: '/verificar', component: () => import('./views/VerifyEmailView.vue'), meta: { title: 'Confirmar cuenta' } },
+    { path: '/cambiar-contrasena', component: () => import('./views/ChangePasswordView.vue'), meta: { title: 'Cambia tu contraseña', auth: true } },
     { path: '/restablecer', component: () => import('./views/ResetPasswordView.vue'), meta: { title: 'Nueva contraseña' } },
     { path: '/mi-cuenta', component: () => import('./views/AccountView.vue'), meta: { title: 'Mis citas', auth: true } },
     { path: '/admin/estadisticas/clientes', component: () => import('./views/StatsClientsView.vue'), meta: { title: 'Nuevos clientes', auth: true, staff: true } },
@@ -35,10 +36,14 @@ export const router = createRouter({
 router.beforeEach(async (to) => {
   const { user, load } = useAuth()
   await load()
+  // Contraseña provisional del taller: hasta cambiarla, solo se puede ver esa pantalla (y los enlaces de correo).
+  if (user.value?.mustChangePassword && to.path !== '/cambiar-contrasena' && to.path !== '/restablecer' && to.path !== '/verificar')
+    return { path: '/cambiar-contrasena' }
   if (to.meta.auth && !user.value) return { path: '/acceso', query: { redirect: to.fullPath } }
   // El panel de gestión es para administradores y gestores; lo que cada uno puede tocar lo decide la API.
   if (to.meta.staff && user.value?.role !== 'admin' && user.value?.role !== 'manager') return { path: '/' }
   // /verificar y /restablecer se abren desde un enlace del correo: deben funcionar siempre.
+  if (to.path === '/cambiar-contrasena' && user.value && !user.value.mustChangePassword) return { path: user.value.role === 'client' ? '/mi-cuenta' : '/admin' }
   if (to.path === '/acceso' && user.value) return { path: user.value.role === 'client' ? '/mi-cuenta' : '/admin' }
 })
 

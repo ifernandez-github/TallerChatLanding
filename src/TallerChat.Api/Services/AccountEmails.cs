@@ -27,6 +27,32 @@ public static class AccountEmails
             text.ToString(), null);
     }
 
+    /// <summary>
+    /// Bienvenida a una cuenta creada por el taller. No lleva la contraseña provisional (esa se la da el taller
+    /// por otra vía) y ofrece un enlace para elegir la propia.
+    /// </summary>
+    public static RenderedEmail RenderWelcome(AppUser user, string link, int hours, ShopOptions shop)
+    {
+        var intro = $"Hola {user.Name.Split(' ')[0]}, {shop.Name} ha creado una cuenta para ti con este correo. " +
+                    "Ya está activa y confirmada: no tienes que verificar nada.";
+        var body =
+            $"<p style=\"margin:0 0 12px;line-height:1.6\">{E(intro)}</p>" +
+            "<p style=\"margin:0 0 12px;line-height:1.6\">El taller te dará una contraseña provisional. Puedes elegir ya la tuya con el botón; " +
+            "si entras con la provisional, te pediremos cambiarla en el primer acceso.</p>" +
+            $"<p style=\"margin:0;color:{EmailLayout.Muted};font-size:13px\">El enlace caduca en {hours} horas y solo se puede usar una vez.</p>";
+
+        var text = new StringBuilder($"TU CUENTA EN {shop.Name.ToUpperInvariant()}\n\n{intro}\n\n")
+            .Append("El taller te dará una contraseña provisional; en el primer acceso te pediremos cambiarla.\n\n")
+            .Append($"O elige tu contraseña ahora: {link}\n\nEl enlace caduca en {hours} horas y solo vale una vez.\n\n")
+            .Append("Si no esperabas este correo, ponte en contacto con el taller.\n");
+
+        return new RenderedEmail(
+            $"Tu cuenta está creada · {shop.Name}",
+            EmailLayout.Wrap(shop, "Tu cuenta está creada", body, link, "Elegir mi contraseña",
+                "Si no esperabas este correo, ponte en contacto con el taller."),
+            text.ToString(), null);
+    }
+
     public static RenderedEmail RenderReset(AppUser user, string link, int minutes, ShopOptions shop)
     {
         var intro = $"Hola {user.Name.Split(' ')[0]}, hemos recibido una petición para cambiar la contraseña de tu " +

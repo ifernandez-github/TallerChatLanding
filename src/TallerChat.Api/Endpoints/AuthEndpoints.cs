@@ -18,6 +18,7 @@ public static class AuthEndpoints
         g.MapPost("/register", RegisterAsync).RequireRateLimiting("auth");
         g.MapPost("/login", LoginAsync).RequireRateLimiting("auth");
         g.MapPost("/logout", LogoutAsync);
+        g.MapPost("/change-password", ChangePasswordAsync).RequireAuthorization().RequireRateLimiting("auth");
         g.MapGet("/me", MeAsync).RequireAuthorization();
         g.MapPost("/verify", VerifyAsync).RequireRateLimiting("auth");
         g.MapPost("/resend", ResendAsync).RequireRateLimiting("auth");
@@ -103,6 +104,36 @@ public static class AuthEndpoints
         return user is { Active: true } ? Results.Ok(user.ToDto()) : ApiResults.Error(401, "Sesión no válida.");
     }
 
+    /// <summary>
+    /// Cambio de contraseña con sesión abierta. Pide la actual (la provisional, la primera vez) y deja la sesión
+    /// de este dispositivo abierta con un sello nuevo: las demás sesiones caen.
+    /// </summary>
+    private static async Task<IResult> ChangePasswordAsync(ChangePasswordRequest req, ClaimsPrincipal principal, Db db,
+        IMemoryCache cache, HttpContext http, CancellationToken ct)
+    {
+        if (!Validation.StrongPassword(req.NewPassword))
+            return ApiResults.Error(400, "La contraseña debe tener al menos 10 caracteres, con letras y números.");
+        var id = principal.UserId();
+        var user = await db.Users.Find(u => u.Id == id).FirstOrDefaultAsync(ct);
+        if (user is not { Active: true }) return ApiResults.Error(401, "Sesión no válida.");
+        if (string.IsNullOrEmpty(req.CurrentPassword) || req.CurrentPassword.Length > 100 ||
+            !PasswordHasher.Verify(req.CurrentPassword, user.PasswordHash))
+            return ApiResults.Error(403, "La contraseña actual no es correcta.");
+        if (req.NewPassword == req.CurrentPassword)
+            return ApiResults.Error(400, "La contraseña nueva tiene que ser distinta de la actual.");
+
+        var stamp = NewStamp();
+        await db.Users.UpdateOneAsync(u => u.Id == id, Builders<AppUser>.Update
+            .Set(u => u.PasswordHash, PasswordHasher.Hash(req.NewPassword!))
+            .Set(u => u.MustChangePassword, false)
+            .Set(u => u.SecurityStamp, stamp), cancellationToken: ct);
+        user.SecurityStamp = stamp;
+        user.MustChangePassword = false;
+        Refresh(cache, id, user.Role, stamp);
+        await AuthSetup.SignInAsync(http, user);
+        return Results.Ok(user.ToDto());
+    }
+
     // ---------- Confirmar la cuenta ----------
 
     private static async Task<IResult> VerifyAsync(TokenRequest req, Db db, TokenService tokens, IMemoryCache cache, CancellationToken ct)
@@ -168,6 +199,7 @@ public static class AuthEndpoints
         await db.Users.UpdateOneAsync(u => u.Id == user.Id, Builders<AppUser>.Update
             .Set(u => u.PasswordHash, PasswordHasher.Hash(req.Password!))
             .Set(u => u.EmailVerified, true)
+            .Set(u => u.MustChangePassword, false)
             .Set(u => u.SecurityStamp, stamp), cancellationToken: ct);
 
         await tokens.InvalidateAsync(user.Id, TokenKinds.Verify, ct);

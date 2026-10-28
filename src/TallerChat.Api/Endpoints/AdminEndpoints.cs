@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
 using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Options;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
@@ -149,7 +150,8 @@ public static class AdminEndpoints
     /// Alta de una cuenta por el personal. La cuenta nace activa y con el correo ya confirmado: quien la crea
     /// responde de que la dirección es correcta, así que no hay enlace de verificación. El gestor solo crea clientes.
     /// </summary>
-    private static async Task<IResult> CreateUserAsync(AdminCreateUserRequest req, ClaimsPrincipal principal, Db db, CancellationToken ct)
+    private static async Task<IResult> CreateUserAsync(AdminCreateUserRequest req, ClaimsPrincipal principal, Db db,
+        TokenService tokens, Notifier notifier, IOptions<ShopOptions> shop, CancellationToken ct)
     {
         var role = string.IsNullOrWhiteSpace(req.Role) ? Roles.Client : req.Role;
         if (!Roles.All.Contains(role)) return ApiResults.Error(400, "El rol no es válido.");
@@ -169,6 +171,7 @@ public static class AdminEndpoints
             Name = name, Email = email, Phone = phone, Address = address, Role = role,
             PasswordHash = PasswordHasher.Hash(req.Password!),
             EmailVerified = true,
+            MustChangePassword = true,
             SecurityStamp = Guid.NewGuid().ToString("N")
         };
         try { await db.Users.InsertOneAsync(user, cancellationToken: ct); }
@@ -176,7 +179,11 @@ public static class AdminEndpoints
         {
             return ApiResults.Error(409, "Ya existe una cuenta con ese correo.");
         }
-        return Results.Json(user.ToAdminDto(0), statusCode: 201);
+
+        // Bienvenida con enlace para elegir contraseña. Con CancellationToken.None: sale aunque se cierre la pestaña.
+        var raw = await tokens.IssueAsync(user.Id, TokenKinds.Reset, CancellationToken.None, welcome: true);
+        var sent = await notifier.TrySendWelcomeAsync(user, TokenService.Link(shop.Value, "/restablecer", raw), CancellationToken.None);
+        return Results.Json(new AdminCreateUserResponse(user.ToAdminDto(0), sent), statusCode: 201);
     }
 
     /// <summary>Todas las citas de una cuenta (también las pasadas y canceladas), la más reciente primero.</summary>

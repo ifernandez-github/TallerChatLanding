@@ -3,7 +3,7 @@ namespace TallerChat.Api;
 // ---------- Usuarios ----------
 public sealed record AddressDto(string? Street, string? PostalCode, string? City, string? Province);
 public sealed record VehicleDto(string Id, string Make, string Model, string Plate, int? Year, int? Km, string? Fuel, string? Vin);
-public sealed record UserDto(string Id, string Name, string Email, string? Phone, string Role, AddressDto? Address, List<VehicleDto> Vehicles);
+public sealed record UserDto(string Id, string Name, string Email, string? Phone, string Role, AddressDto? Address, List<VehicleDto> Vehicles, bool MustChangePassword = false);
 
 public sealed record RegisterRequest(string? Name, string? Email, string? EmailConfirm, string? Phone, string? Password);
 public sealed record LoginRequest(string? Email, string? Password);
@@ -15,6 +15,8 @@ public sealed record ProfileRequest(string? Name, string? Phone, AddressDto? Add
 public sealed record VehicleRequest(string? Make, string? Model, string? Plate, int? Year, int? Km, string? Fuel, string? Vin);
 /// <summary>Alta de una cuenta por el personal: queda confirmada y activa, sin correo de verificación.</summary>
 public sealed record AdminCreateUserRequest(string? Name, string? Email, string? Phone, string? Password, AddressDto? Address, string? Role);
+public sealed record AdminCreateUserResponse(AdminUserDto User, bool EmailSent);
+public sealed record ChangePasswordRequest(string? CurrentPassword, string? NewPassword);
 public sealed record AdminUserRequest(string? Name, string? Email, string? Phone, AddressDto? Address, string? Role);
 
 // ---------- Baja de cuenta ----------
@@ -67,7 +69,7 @@ public static class Mappers
     public static VehicleDto ToDto(this Vehicle v) => new(v.Id, v.Make, v.Model, v.Plate, v.Year, v.Km, v.Fuel, v.Vin);
 
     public static UserDto ToDto(this AppUser u) =>
-        new(u.Id, u.Name, u.Email, u.Phone, u.Role, u.Address.ToDto(), u.Vehicles.Select(v => v.ToDto()).ToList());
+        new(u.Id, u.Name, u.Email, u.Phone, u.Role, u.Address.ToDto(), u.Vehicles.Select(v => v.ToDto()).ToList(), u.MustChangePassword);
 
     public static AdminUserDto ToAdminDto(this AppUser u, int appointments) =>
         new(u.Id, u.Name, u.Email, u.Phone, u.Role, u.Active, u.EmailVerified, u.CreatedAt, appointments,

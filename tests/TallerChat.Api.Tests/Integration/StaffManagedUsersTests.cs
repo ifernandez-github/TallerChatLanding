@@ -159,4 +159,94 @@ public sealed class StaffManagedUsersTests(MongoFixture mongo) : IntegrationTest
         var other = await App.UserAsync();
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync($"/api/admin/users/{other.Id}/appointments")).StatusCode);
     }
+
+    // ---------- Bienvenida y contraseña provisional ----------
+
+    private async Task<(string Email, HttpClient Session, string Welcome)> CreatedAsync()
+    {
+        var manager = await AsAsync(Roles.Manager);
+        var email = NewEmail();
+        var res = await manager.PostAsync("/api/admin/users", new { name = "Lucía Prado", email, password = StrongPassword });
+        Assert.Equal(HttpStatusCode.Created, res.StatusCode);
+        Assert.True((await res.JsonAsync()).GetProperty("emailSent").GetBoolean());
+        var mail = Assert.Single(App.Google.To(email));
+        var session = App.NewClient();
+        Assert.Equal(HttpStatusCode.OK, (await session.PostAsync("/api/auth/login", new { email, password = StrongPassword })).StatusCode);
+        return (email, session, mail.TokenFor("/restablecer"));
+    }
+
+    [MongoFact]
+    public async Task La_cuenta_creada_recibe_un_correo_de_bienvenida_con_enlace_para_elegir_contrasena()
+    {
+        var manager = await AsAsync(Roles.Manager);
+        var email = NewEmail();
+
+        await manager.PostAsync("/api/admin/users", new { name = "Lucía Prado", email, password = StrongPassword });
+
+        var mail = Assert.Single(App.Google.To(email));
+        Assert.StartsWith("Tu cuenta está creada", mail.Subject);
+        Assert.StartsWith("https://taller.test/restablecer?token=", mail.LinkTo("/restablecer"));
+        Assert.DoesNotContain(StrongPassword, mail.Subject);
+        Assert.True((await App.Data.Users.Find(u => u.Email == email).FirstAsync()).MustChangePassword);
+    }
+
+    [MongoFact]
+    public async Task Con_la_contrasena_provisional_solo_se_puede_cambiarla()
+    {
+        var (_, session, _) = await CreatedAsync();
+
+        var me = await session.GetAsync("/api/auth/me");
+        Assert.Equal(HttpStatusCode.OK, me.StatusCode);
+        Assert.True((await me.JsonAsync()).GetProperty("mustChangePassword").GetBoolean());
+
+        var blocked = await session.GetAsync("/api/appointments/mine");
+        Assert.Equal(HttpStatusCode.Forbidden, blocked.StatusCode);
+        Assert.Equal("password_change_required", (await blocked.JsonAsync()).GetProperty("code").GetString());
+    }
+
+    [MongoFact]
+    public async Task Cambiar_la_contrasena_libera_la_cuenta_y_la_provisional_deja_de_valer()
+    {
+        var (email, session, _) = await CreatedAsync();
+        const string Mine = "Mi-clave-nueva-77";
+
+        Assert.Equal(HttpStatusCode.Forbidden, (await session.PostAsync("/api/auth/change-password", new { currentPassword = "otra-Clave-1234", newPassword = Mine })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await session.PostAsync("/api/auth/change-password", new { currentPassword = StrongPassword, newPassword = StrongPassword })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await session.PostAsync("/api/auth/change-password", new { currentPassword = StrongPassword, newPassword = "corta1" })).StatusCode);
+
+        var ok = await session.PostAsync("/api/auth/change-password", new { currentPassword = StrongPassword, newPassword = Mine });
+        Assert.Equal(HttpStatusCode.OK, ok.StatusCode);
+        Assert.False((await ok.JsonAsync()).GetProperty("mustChangePassword").GetBoolean());
+
+        // La misma sesión ya puede usar la aplicación.
+        Assert.Equal(HttpStatusCode.OK, (await session.GetAsync("/api/appointments/mine")).StatusCode);
+        // La provisional ya no entra; la nueva sí, y sin pedir cambio.
+        Assert.Equal(HttpStatusCode.Unauthorized, (await App.NewClient().PostAsync("/api/auth/login", new { email, password = StrongPassword })).StatusCode);
+        var again = App.NewClient();
+        var login = await again.PostAsync("/api/auth/login", new { email, password = Mine });
+        Assert.False((await login.JsonAsync()).GetProperty("mustChangePassword").GetBoolean());
+    }
+
+    [MongoFact]
+    public async Task El_enlace_del_correo_de_bienvenida_tambien_libera_la_cuenta()
+    {
+        var (email, _, token) = await CreatedAsync();
+        const string Mine = "Mi-clave-nueva-77";
+
+        var reset = await App.NewClient().PostAsync("/api/auth/reset", new { token, password = Mine });
+
+        Assert.Equal(HttpStatusCode.OK, reset.StatusCode);
+        Assert.False((await App.Data.Users.Find(u => u.Email == email).FirstAsync()).MustChangePassword);
+        var login = await App.NewClient().PostAsync("/api/auth/login", new { email, password = Mine });
+        Assert.False((await login.JsonAsync()).GetProperty("mustChangePassword").GetBoolean());
+    }
+
+    [MongoFact]
+    public async Task Un_usuario_normal_no_tiene_que_cambiar_la_contrasena()
+    {
+        var client = await App.LoginAsync(await App.UserAsync());
+        var me = await (await client.GetAsync("/api/auth/me")).JsonAsync();
+        Assert.False(me.GetProperty("mustChangePassword").GetBoolean());
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync("/api/appointments/mine")).StatusCode);
+    }
 }
