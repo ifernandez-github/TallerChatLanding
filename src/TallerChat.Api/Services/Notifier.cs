@@ -39,6 +39,10 @@ public sealed class Notifier(EmailService mail, IOptions<SmtpOptions> smtp, Book
     public Task<bool> TrySendVerifyAsync(AppUser user, string link, CancellationToken ct)
         => SendRenderedAsync(user, AccountEmails.RenderVerify(user, link, auth.Value.VerifyTokenHours, shop.Value), "verificación", ct);
 
+    /// <summary>Bienvenida a una cuenta creada por el personal, con enlace para elegir contraseña.</summary>
+    public Task<bool> TrySendWelcomeAsync(AppUser user, string link, CancellationToken ct)
+        => SendRenderedAsync(user, AccountEmails.RenderWelcome(user, link, auth.Value.VerifyTokenHours, shop.Value), "bienvenida", ct);
+
     /// <summary>Correo con el enlace para elegir una contraseña nueva.</summary>
     public Task<bool> TrySendResetAsync(AppUser user, string link, CancellationToken ct)
         => SendRenderedAsync(user, AccountEmails.RenderReset(user, link, auth.Value.ResetTokenMinutes, shop.Value), "restablecimiento", ct);

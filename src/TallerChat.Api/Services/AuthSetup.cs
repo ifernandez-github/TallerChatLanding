@@ -6,7 +6,7 @@ using MongoDB.Driver;
 
 namespace TallerChat.Api;
 
-public sealed record UserState(bool Active, string Role, string Stamp);
+public sealed record UserState(bool Active, string Role, string Stamp, bool MustChange = false);
 
 public static class TallerClaims
 {
@@ -61,7 +61,7 @@ public static class AuthSetup
         {
             var db = ctx.HttpContext.RequestServices.GetRequiredService<Db>();
             var u = await db.Users.Find(x => x.Id == id).FirstOrDefaultAsync(ctx.HttpContext.RequestAborted);
-            state = new UserState(u is { Active: true, EmailVerified: true }, u?.Role ?? "", u?.SecurityStamp ?? "");
+            state = new UserState(u is { Active: true, EmailVerified: true }, u?.Role ?? "", u?.SecurityStamp ?? "", u?.MustChangePassword ?? false);
             cache.Set(CacheKey(id), state, TimeSpan.FromMinutes(1));
         }
 
@@ -69,8 +69,31 @@ public static class AuthSetup
         {
             ctx.RejectPrincipal();
             await ctx.HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+            return;
         }
+        if (state.MustChange) ctx.HttpContext.Items[MustChangeKey] = true;
     }
+
+    private const string MustChangeKey = "taller:must-change-password";
+    public const string PasswordChangeRequired = "password_change_required";
+
+    // Lo único que puede hacer quien aún tiene la contraseña que le dio el taller.
+    private static readonly string[] AllowedWhileChanging = ["/api/auth/me", "/api/auth/logout", "/api/auth/change-password"];
+
+    /// <summary>
+    /// Mientras la cuenta tenga la contraseña provisional, la API rechaza todo salvo ver la sesión, salir y cambiarla.
+    /// Se impone aquí y no solo en la web: así no basta con saltarse la pantalla de cambio.
+    /// </summary>
+    public static IApplicationBuilder UseMustChangePassword(this IApplicationBuilder app) => app.Use(async (ctx, next) =>
+    {
+        if (ctx.Items.ContainsKey(MustChangeKey) && ctx.Request.Path.StartsWithSegments("/api")
+            && !AllowedWhileChanging.Contains(ctx.Request.Path.Value?.TrimEnd('/'), StringComparer.OrdinalIgnoreCase))
+        {
+            await ApiResults.Error(403, "Antes de seguir tienes que cambiar la contraseña provisional.", PasswordChangeRequired).ExecuteAsync(ctx);
+            return;
+        }
+        await next();
+    });
 
     public static async Task SignInAsync(HttpContext http, AppUser user)
     {

@@ -17,13 +17,14 @@ public sealed class TokenService(Db db, IMemoryCache cache, IOptions<AuthOptions
     private static string Sha256(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
     /// <summary>Emite un enlace nuevo e invalida los anteriores del mismo tipo para ese usuario.</summary>
-    public async Task<string> IssueAsync(string userId, string kind, CancellationToken ct)
+    public async Task<string> IssueAsync(string userId, string kind, CancellationToken ct, bool welcome = false)
     {
         await InvalidateAsync(userId, kind, ct);
 
         var raw = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
             .TrimEnd('=').Replace('+', '-').Replace('/', '_'); // seguro dentro de una URL
-        var ttl = kind == TokenKinds.Reset
+        // El enlace de bienvenida es un restablecimiento, pero llega a quien aún no esperaba el correo: dura como el de verificación.
+        var ttl = kind == TokenKinds.Reset && !welcome
             ? TimeSpan.FromMinutes(o.ResetTokenMinutes)
             : TimeSpan.FromHours(o.VerifyTokenHours);
 

@@ -91,6 +91,7 @@ app.UseStaticFiles(); // sirve el build de Vue desde wwwroot
 app.UseRouting();
 app.UseCors();
 app.UseAuthentication(); // antes del límite de peticiones para poder limitar por usuario
+app.UseMustChangePassword();
 app.UseRateLimiter();
 app.UseAuthorization();
 
