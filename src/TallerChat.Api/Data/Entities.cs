@@ -88,6 +88,11 @@ public sealed class AppUser
     /// <summary>Hasta que no confirma su correo, la cuenta no puede iniciar sesión.</summary>
     [BsonElement("email_verified")] public bool EmailVerified { get; set; }
     /// <summary>
+    /// Cuentas creadas por el personal: la contraseña inicial la eligió otra persona, así que en el primer
+    /// acceso hay que cambiarla antes de poder hacer nada más.
+    /// </summary>
+    [BsonElement("must_change_password")] public bool MustChangePassword { get; set; }
+    /// <summary>
     /// Cambia al restablecer la contraseña y se guarda también en la cookie: así las sesiones abiertas
     /// en otros dispositivos dejan de valer. Vacío en las cuentas anteriores a esta función.
     /// </summary>
